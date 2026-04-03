@@ -8,16 +8,24 @@ version = "0.1.0"
 description = "Long-running autonomous agent prototype"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["groq"]
+dependencies = [
+	"groq",
+	"e2b-code-interpreter",
+	"duckduckgo-search",
+	"python-dotenv",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-mock>=3.0"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.scripts]
+autonomous-agent = "autonomous_agent.__main__:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

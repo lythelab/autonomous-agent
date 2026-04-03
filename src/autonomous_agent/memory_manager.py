@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
 import time
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
+
+from .config import get_settings
 
 try:
     from groq import Groq
@@ -24,10 +25,11 @@ class MemoryManager:
         groq_model: str | None = None,
         summary_provider: Callable[[list[dict[str, Any]]], str] | None = None,
     ) -> None:
+        settings = get_settings()
         self.db_path = Path(db_path)
         self.max_full_episodes = max_full_episodes
         self.groq_client = groq_client
-        self.groq_model = groq_model or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.groq_model = groq_model or settings.groq_model
         self.summary_provider = summary_provider or self._summarize_with_groq
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.db_path)
@@ -152,6 +154,28 @@ class MemoryManager:
         scored_results.sort(key=lambda item: (-item["score"], -item["updated_at"], item["key"]))
         return scored_results[:top_k]
 
+    def get_context_pack(self, query: str | None = None, top_k: int = 5) -> dict[str, Any]:
+        """Return compact memory context for planning/execution prompts."""
+        recent_full = self.connection.execute(
+            """
+            SELECT key, value_json, entry_type, created_at, updated_at
+            FROM memory_entries
+            WHERE entry_type = 'full'
+            ORDER BY updated_at DESC, key ASC
+            LIMIT ?
+            """,
+            (top_k,),
+        ).fetchall()
+        episodes = [self._row_to_record(row) for row in recent_full]
+
+        context: dict[str, Any] = {
+            "summary": self.get_summary(),
+            "recent_episodes": episodes,
+        }
+        if query:
+            context["matches"] = self.search(query, top_k=top_k)
+        return context
+
     def _compress_if_needed(self) -> None:
         full_count = self.connection.execute(
             "SELECT COUNT(*) FROM memory_entries WHERE entry_type = 'full'"
@@ -240,7 +264,7 @@ class MemoryManager:
         if Groq is None:
             raise RuntimeError("Groq SDK is not installed. Install the 'groq' package and set GROQ_API_KEY.")
 
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = get_settings().groq_api_key
         if not api_key:
             raise RuntimeError("GROQ_API_KEY is required for Groq-backed compression.")
 
