@@ -1,0 +1,4 @@
+groq
+e2b-code-interpreter
+duckduckgo-search
+python-dotenv
