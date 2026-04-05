@@ -99,7 +99,7 @@ class ToolExecutor:
             )
         if not get_settings().e2b_api_key:
             raise RuntimeError("E2B_API_KEY is not configured. Set it in your environment or .env file.")
-        return Sandbox()
+        return Sandbox.create()
 
     def _extract_logs(self, result: Any) -> str:
         logs = getattr(result, "logs", "")
