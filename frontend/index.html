@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autonomous Agent Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+
+    <main class="shell">
+      <header class="hero">
+        <p class="kicker">AUTONOMOUS AGENT</p>
+        <h1>Mission Control Interface</h1>
+        <p class="subtitle">
+          Start a goal, run cycles, and inspect state from a Render-hosted API.
+        </p>
+      </header>
+
+      <section class="panel api-panel">
+        <label for="apiUrl">Backend API URL</label>
+        <div class="row">
+          <input id="apiUrl" type="url" placeholder="https://your-render-service.onrender.com" />
+          <button id="saveApi">Save</button>
+        </div>
+        <p id="apiHint">Saved URL is used for all requests.</p>
+      </section>
+
+      <section class="panel action-panel">
+        <label for="goal">Goal</label>
+        <textarea id="goal" rows="3" placeholder="Monitor AI releases and summarize notable changes"></textarea>
+
+        <div class="action-grid">
+          <button id="setGoal" class="primary">Set Goal</button>
+          <button id="runCycle">Run 1 Cycle</button>
+          <button id="runFive">Run 5 Cycles</button>
+          <button id="refresh">Refresh State</button>
+          <button id="reset" class="danger">Reset</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="status-row">
+          <h2>Current State</h2>
+          <span id="statusBadge" class="badge">idle</span>
+        </div>
+        <pre id="stateOutput">Loading...</pre>
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

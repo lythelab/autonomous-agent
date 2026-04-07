@@ -30,7 +30,12 @@ def build_default_agent(
     memory = MemoryManager(db_path=resolved_db_path, max_full_episodes=resolved_max_full)
     planner = TaskPlanner()
     reflection_engine = ReflectionEngine()
-    tool_executor = ToolExecutor()
+    try:
+        tool_executor = ToolExecutor()
+    except RuntimeError:
+        # Allow booting in environments without E2B so the API can still run
+        # using the loop's default executor.
+        tool_executor = None
 
     return AgentLoop(
         memory=memory,
