@@ -39,6 +39,16 @@ class RunRequest(BaseModel):
     max_cycles: int = Field(default=1, ge=1, le=10_000)
 
 
+def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
+    full_episodes = list(reversed(_agent.memory.get_full_episodes()))
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "summary": _agent.memory.get_summary(),
+        "recent_episodes": full_episodes[:safe_limit],
+        "count": len(full_episodes),
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -48,6 +58,12 @@ def health() -> dict[str, str]:
 def get_state() -> dict[str, Any]:
     with _lock:
         return _agent.load_state()
+
+
+@app.get("/logs")
+def get_logs(limit: int = 20) -> dict[str, Any]:
+    with _lock:
+        return _build_logs_payload(limit=limit)
 
 
 @app.post("/goal")

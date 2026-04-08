@@ -2,7 +2,9 @@ const apiInput = document.getElementById("apiUrl");
 const apiHint = document.getElementById("apiHint");
 const goalInput = document.getElementById("goal");
 const output = document.getElementById("stateOutput");
+const outputTitle = document.getElementById("outputTitle");
 const statusBadge = document.getElementById("statusBadge");
+const viewBadge = document.getElementById("viewBadge");
 
 const saveApiButton = document.getElementById("saveApi");
 const setGoalButton = document.getElementById("setGoal");
@@ -10,9 +12,14 @@ const runCycleButton = document.getElementById("runCycle");
 const runFiveButton = document.getElementById("runFive");
 const refreshButton = document.getElementById("refresh");
 const resetButton = document.getElementById("reset");
+const showStateButton = document.getElementById("showState");
+const showLogsButton = document.getElementById("showLogs");
+const showBothButton = document.getElementById("showBoth");
 
 const storedUrl = localStorage.getItem("agentApiUrl") || "";
 apiInput.value = storedUrl;
+
+let selectedView = "state";
 
 saveApiButton.addEventListener("click", () => {
   const value = apiInput.value.trim().replace(/\/$/, "");
@@ -27,29 +34,65 @@ setGoalButton.addEventListener("click", async () => {
     return;
   }
   await post("/goal", { goal });
-  await refreshState();
+  await refreshView();
 });
 
 runCycleButton.addEventListener("click", async () => {
   await post("/cycle", {});
-  await refreshState();
+  await refreshView();
 });
 
 runFiveButton.addEventListener("click", async () => {
   await post("/run", { max_cycles: 5 });
-  await refreshState();
+  await refreshView();
 });
 
-refreshButton.addEventListener("click", refreshState);
+refreshButton.addEventListener("click", refreshView);
 
 resetButton.addEventListener("click", async () => {
   await post("/reset", {});
-  await refreshState();
+  await refreshView();
 });
 
-async function refreshState() {
-  const data = await get("/state");
-  renderState(data);
+showStateButton.addEventListener("click", async () => {
+  setView("state");
+  await refreshView();
+});
+
+showLogsButton.addEventListener("click", async () => {
+  setView("logs");
+  await refreshView();
+});
+
+showBothButton.addEventListener("click", async () => {
+  setView("both");
+  await refreshView();
+});
+
+function setView(view) {
+  selectedView = view;
+  viewBadge.textContent = view;
+  showStateButton.classList.toggle("active", view === "state");
+  showLogsButton.classList.toggle("active", view === "logs");
+  showBothButton.classList.toggle("active", view === "both");
+  outputTitle.textContent = view === "state" ? "Current State" : view === "logs" ? "Recent Logs" : "State + Logs";
+}
+
+async function refreshView() {
+  if (selectedView === "logs") {
+    const logs = await get("/logs");
+    renderState(logs, "logs");
+    return;
+  }
+
+  if (selectedView === "both") {
+    const [state, logs] = await Promise.all([get("/state"), get("/logs")]);
+    renderState({ state, logs }, "both");
+    return;
+  }
+
+  const state = await get("/state");
+  renderState(state, "state");
 }
 
 function getBaseUrl() {
@@ -99,17 +142,29 @@ async function safeText(response) {
   }
 }
 
-function renderState(state) {
+function renderState(state, view = "state") {
   if (!state) {
     return;
   }
   output.textContent = JSON.stringify(state, null, 2);
-  const status = state.status || "idle";
-  statusBadge.textContent = status;
-  statusBadge.className = `badge ${status}`;
+  let badgeText = state.status || "idle";
+  let badgeClass = state.status || "idle";
+
+  if (view === "logs") {
+    badgeText = `logs ${state.count ?? 0}`;
+    badgeClass = "completed";
+  } else if (view === "both") {
+    badgeText = "mixed";
+    badgeClass = "running";
+  }
+
+  statusBadge.textContent = badgeText;
+  statusBadge.className = `badge ${badgeClass}`;
 }
 
-refreshState().catch((error) => {
+setView(selectedView);
+
+refreshView().catch((error) => {
   output.textContent = JSON.stringify({ message: error.message }, null, 2);
   apiHint.textContent = "Set your backend API URL and click Save.";
 });
