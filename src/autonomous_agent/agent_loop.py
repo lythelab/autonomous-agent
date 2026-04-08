@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -9,6 +10,9 @@ from .reflection_engine import ReflectionEngine
 from .state_tracker import StateTracker
 from .task_planner import TaskPlanner
 from .tool_executor import ToolExecutor
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentLoop:
@@ -115,6 +119,13 @@ class AgentLoop:
 
     def run_cycle(self) -> dict[str, Any]:
         state = self.load_state()
+        logger.info(
+            "Starting cycle goal=%r status=%s remaining=%d completed=%d",
+            state.get("goal"),
+            state.get("status"),
+            len(state.get("remaining_steps", [])),
+            len(state.get("completed_steps", [])),
+        )
         if state.get("goal") and not state.get("remaining_steps") and state.get("status") != "completed":
             context = self.memory.get_context_pack(query=state.get("goal"), top_k=5)
             replanned = self.planner.create_plan(state.get("goal"), context)
@@ -130,10 +141,18 @@ class AgentLoop:
             state = self.load_state()
             state["status"] = "completed"
             self.save_state(state)
+            logger.info("Cycle completed: no remaining steps")
             self._post_cycle_maintenance()
             return {"status": "completed", "step": None, "result": None}
 
+        logger.info("Executing step=%r", next_step)
         result = self.execute_step(next_step)
+        logger.info(
+            "Finished step=%r result_status=%s error=%r",
+            next_step,
+            result.get("status"),
+            result.get("error"),
+        )
         self._post_cycle_maintenance()
         return {
             "status": result.get("status", "unknown"),
@@ -165,20 +184,45 @@ class AgentLoop:
     ) -> dict[str, Any]:
         start = time.time()
         iterations = 0
+        timeout_reached = False
+
+        logger.info(
+            "Run started max_runtime_seconds=%r stop_when_completed=%s",
+            max_runtime_seconds,
+            stop_when_completed,
+        )
 
         while iterations < self.max_iterations:
             cycle_result = self.run_cycle()
             iterations += 1
 
             if stop_when_completed and cycle_result["status"] == "completed":
+                logger.info("Run stopped because goal completed")
                 break
 
             if max_runtime_seconds is not None and (time.time() - start) >= max_runtime_seconds:
+                timeout_reached = True
+                logger.info(
+                    "Run stopped due to runtime limit elapsed=%.2fs limit=%.2fs",
+                    time.time() - start,
+                    max_runtime_seconds,
+                )
                 break
 
             if self.cycle_sleep_seconds > 0:
                 time.sleep(self.cycle_sleep_seconds)
 
+        final_state = self.load_state()
+        if timeout_reached and final_state.get("status") != "completed":
+            final_state["status"] = "timeout"
+            self.save_state(final_state)
+
+        logger.info(
+            "Run ended status=%s iterations=%d remaining=%d",
+            final_state.get("status"),
+            int(final_state.get("iterations", 0)),
+            len(final_state.get("remaining_steps", [])),
+        )
         return self.load_state()
 
     def _default_executor(self, step: str, state: dict[str, Any]) -> dict[str, Any]:

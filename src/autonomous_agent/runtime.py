@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from .agent_loop import AgentLoop
@@ -8,6 +9,9 @@ from .memory_manager import MemoryManager
 from .reflection_engine import ReflectionEngine
 from .task_planner import TaskPlanner
 from .tool_executor import ToolExecutor
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_default_agent(
@@ -56,6 +60,10 @@ def start_autonomous_goal(
     state = agent.load_state()
 
     if state.get("goal") != goal or state.get("status") in {"idle", "completed"}:
+        logger.info("Initializing goal=%r", goal)
         agent.set_goal_autonomous(goal)
+    else:
+        logger.info("Resuming goal=%r status=%s", goal, state.get("status"))
 
+    logger.info("Starting autonomous run runtime_seconds=%r", runtime_seconds)
     return agent.run_forever(max_runtime_seconds=runtime_seconds)

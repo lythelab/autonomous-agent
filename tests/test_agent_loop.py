@@ -173,3 +173,15 @@ def test_agent_calls_tool_keep_alive_each_cycle(tmp_path: Path) -> None:
     agent.run_cycle()
 
     assert "print('ping')" in sandbox.calls
+
+
+def test_run_forever_marks_timeout_when_runtime_limit_hit(tmp_path: Path) -> None:
+    memory = MemoryManager(db_path=tmp_path / "timeout.db")
+    agent = AgentLoop(memory=memory)
+    agent.set_goal("Two steps", ["step_1", "step_2"])
+
+    state = agent.run_forever(max_runtime_seconds=0)
+
+    assert state["status"] == "timeout"
+    assert state["completed_steps"] == ["step_1"]
+    assert state["remaining_steps"] == ["step_2"]
