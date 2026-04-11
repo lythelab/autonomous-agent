@@ -50,6 +50,7 @@ cp .env.example .env
 - `AGENT_MAX_FULL_EPISODES`: Compression threshold for full episodes
 - `AGENT_MAX_ITERATIONS`: Safety cap for long-running loops
 - `AGENT_CYCLE_SLEEP_SECONDS`: Delay between cycles during long runs
+- `BACKEND_API_URL`: Backend base URL exposed to the frontend via `/env`
 
 The project automatically loads values from `.env` via `python-dotenv`.
 
@@ -105,6 +106,8 @@ See `TESTING.md` for coverage details and what each test validates.
 ## Deploy on AWS EC2
 
 This repository is configured for AWS EC2-style deployment of the API service.
+
+The frontend loads the backend URL from `/env`, so set `BACKEND_API_URL` in `.env` and serve the frontend from the same host or reverse proxy it through the API host.
 
 - Systemd unit template: `deploy/autonomous-agent-api.service`
 - Nginx reverse proxy template: `deploy/nginx-autonomous-agent.conf`

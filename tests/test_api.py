@@ -34,3 +34,11 @@ def test_logs_endpoint_returns_recent_episodes(monkeypatch) -> None:
     assert payload["count"] == 2
     assert len(payload["recent_episodes"]) == 1
     assert payload["recent_episodes"][0]["key"] == "episode_2"
+
+
+def test_env_endpoint_returns_backend_url(monkeypatch) -> None:
+    monkeypatch.setenv("BACKEND_API_URL", "http://localhost:8000")
+
+    payload = api.get_env()
+
+    assert payload.backend_api_url == "http://localhost:8000"

@@ -52,7 +52,7 @@ body {
 
 .shell {
   width: min(980px, 92vw);
-  margin: 42px auto;
+  margin: clamp(16px, 4vw, 42px) auto;
   display: grid;
   gap: 16px;
   animation: reveal 500ms ease-out both;
@@ -82,7 +82,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 20px;
   backdrop-filter: blur(10px);
-  padding: 18px;
+  padding: clamp(12px, 2.2vw, 18px);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
 }
 
@@ -95,6 +95,19 @@ label {
 .row {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.compact-row {
+  flex-wrap: wrap;
+}
+
+.compact-row button {
+  flex: 1 1 160px;
+}
+
+.row > * {
+  min-width: 0;
 }
 
 input,
@@ -120,6 +133,7 @@ button {
   border: 0;
   border-radius: 12px;
   padding: 10px 14px;
+  min-height: 44px;
   background: #ffffff;
   color: #1e1e1e;
   cursor: pointer;
@@ -181,6 +195,13 @@ button.danger {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-row h2 {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.6vw, 1.3rem);
 }
 
 .badge {
@@ -240,22 +261,41 @@ pre {
   }
 }
 
+@media (max-width: 1024px) {
+  .action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .view-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 640px) {
   .row {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .row button {
+    width: 100%;
   }
 
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  pre {
+    max-height: min(50vh, 420px);
   }
 }

@@ -39,6 +39,10 @@ class RunRequest(BaseModel):
     max_cycles: int = Field(default=1, ge=1, le=10_000)
 
 
+class EnvResponse(BaseModel):
+    backend_api_url: str = Field(default="", description="Backend API base URL configured via environment")
+
+
 def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
     full_episodes = list(reversed(_agent.memory.get_full_episodes()))
     safe_limit = max(1, min(limit, 100))
@@ -52,6 +56,11 @@ def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/env", response_model=EnvResponse)
+def get_env() -> EnvResponse:
+    return EnvResponse(backend_api_url=os.getenv("BACKEND_API_URL", ""))
 
 
 @app.get("/state")

@@ -26,12 +26,15 @@
       </header>
 
       <section class="panel api-panel">
-        <label for="apiUrl">AWS EC2 API URL</label>
-        <div class="row">
-          <input id="apiUrl" type="url" placeholder="http://ec2-12-34-56-78.compute-1.amazonaws.com" />
-          <button id="saveApi">Save</button>
+        <div class="status-row">
+          <h2>Backend Connection</h2>
+          <span id="backendBadge" class="badge idle">loading</span>
         </div>
-        <p id="apiHint">Use your EC2 public DNS/domain. Saved URL is used for all requests.</p>
+        <p id="apiHint">Loading backend URL from .env...</p>
+        <div class="row compact-row">
+          <button id="checkHealth" class="primary">Check Health</button>
+          <button id="reloadConfig">Reload Config</button>
+        </div>
       </section>
 
       <section class="panel action-panel">
