@@ -50,6 +50,14 @@
         </div>
       </section>
 
+      <section class="panel output-panel">
+        <div class="status-row">
+          <h2>Latest Output</h2>
+          <span id="outputBadge" class="badge idle">none</span>
+        </div>
+        <pre id="latestOutput">No output available yet.</pre>
+      </section>
+
       <section class="panel view-panel">
         <div class="status-row">
           <h2>Display Mode</h2>
@@ -65,7 +73,7 @@
 
       <section class="panel">
         <div class="status-row">
-          <h2 id="outputTitle">Current State</h2>
+          <h2 id="outputTitle">State Snapshot</h2>
           <span id="statusBadge" class="badge">idle</span>
         </div>
         <pre id="stateOutput">Loading...</pre>

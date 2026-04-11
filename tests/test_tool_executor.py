@@ -133,3 +133,16 @@ def test_execute_task_plain_research_text_uses_web_search() -> None:
 
     assert result["status"] == "ok"
     assert any("DDGS" in call for call in sandbox.calls)
+
+
+def test_execute_task_underscore_step_uses_goal_query() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "check_ai_releases",
+        state={"goal": "Monitor AI releases and summarize notable changes"},
+    )
+
+    assert result["status"] == "ok"
+    assert any("Monitor AI releases and summarize notable changes" in call for call in sandbox.calls)

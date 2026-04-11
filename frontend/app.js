@@ -1,5 +1,7 @@
 const apiHint = document.getElementById("apiHint");
 const goalInput = document.getElementById("goal");
+const latestOutput = document.getElementById("latestOutput");
+const outputBadge = document.getElementById("outputBadge");
 const output = document.getElementById("stateOutput");
 const outputTitle = document.getElementById("outputTitle");
 const statusBadge = document.getElementById("statusBadge");
@@ -22,6 +24,10 @@ const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
 let selectedView = "state";
+const MAX_PREVIEW_STRING_LENGTH = 300;
+const MAX_PREVIEW_ARRAY_ITEMS = 12;
+const MAX_PREVIEW_OBJECT_KEYS = 20;
+const MAX_PREVIEW_DEPTH = 4;
 
 checkHealthButton.addEventListener("click", checkBackendHealth);
 
@@ -200,29 +206,28 @@ function renderState(state, view = "state") {
   if (!state) {
     return;
   }
-  
+
   let displayText = "";
-  const MAX_LENGTH = 3000;
-  
+  const latestOutputText = extractLatestOutput(state, view);
+
+  if (latestOutput) {
+    latestOutput.textContent = latestOutputText || "No output available yet.";
+    outputBadge.textContent = latestOutputText ? "ready" : "none";
+    outputBadge.className = `badge ${latestOutputText ? "completed" : "idle"}`;
+  }
+
   if (view === "state" && state.goal !== undefined) {
     const stateInfo = {
       goal: state.goal,
       status: state.status,
       iterations: state.iterations,
-      completed_steps: state.completed_steps?.length || 0,
-      remaining_steps: state.remaining_steps?.length || 0,
+      completed_steps: countItems(state.completed_steps),
+      remaining_steps: countItems(state.remaining_steps),
       failure_count: state.failure_count,
     };
-    if (state.last_result?.output) {
-      stateInfo.last_output = state.last_result.output.substring(0, 500);
-    }
-    displayText = JSON.stringify(stateInfo, null, 2);
+    displayText = JSON.stringify(compactForDisplay(stateInfo), null, 2);
   } else {
-    displayText = JSON.stringify(state, null, 2);
-  }
-  
-  if (displayText.length > MAX_LENGTH) {
-    displayText = displayText.substring(0, MAX_LENGTH) + "\n\n... (output truncated)";
+    displayText = JSON.stringify(compactForDisplay(state), null, 2);
   }
   
   output.textContent = displayText;
@@ -239,6 +244,92 @@ function renderState(state, view = "state") {
 
   statusBadge.textContent = badgeText;
   statusBadge.className = `badge ${badgeClass}`;
+}
+
+function extractLatestOutput(state, view) {
+  if (!state) {
+    return "";
+  }
+
+  if (view === "both") {
+    return extractLatestOutput(state.state || state.logs || state, "state") || extractLatestOutput(state.logs, "logs");
+  }
+
+  if (typeof state.last_output === "string" && state.last_output.trim()) {
+    return compactForDisplay(state.last_output);
+  }
+
+  if (typeof state.last_result?.output === "string" && state.last_result.output.trim()) {
+    return compactForDisplay(state.last_result.output);
+  }
+
+  if (view === "logs") {
+    const recentEpisodes = Array.isArray(state.recent_episodes) ? state.recent_episodes : [];
+    for (const episode of recentEpisodes) {
+      const episodeValue = episode?.value || {};
+      const candidate = episodeValue?.result?.output || episodeValue?.output || episodeValue?.last_output;
+      if (typeof candidate === "string" && candidate.trim()) {
+        return compactForDisplay(candidate);
+      }
+    }
+  }
+
+  return "";
+}
+
+function countItems(value) {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  if (typeof value === "number") {
+    return value;
+  }
+
+  return 0;
+}
+
+function compactForDisplay(value, depth = 0) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    if (value.length <= MAX_PREVIEW_STRING_LENGTH) {
+      return value;
+    }
+
+    return `${value.slice(0, MAX_PREVIEW_STRING_LENGTH)}… (truncated)`;
+  }
+
+  if (typeof value !== "object") {
+    return value;
+  }
+
+  if (depth >= MAX_PREVIEW_DEPTH) {
+    return Array.isArray(value) ? `[${value.length} items]` : "[object]";
+  }
+
+  if (Array.isArray(value)) {
+    const items = value.slice(0, MAX_PREVIEW_ARRAY_ITEMS).map((item) => compactForDisplay(item, depth + 1));
+    if (value.length > MAX_PREVIEW_ARRAY_ITEMS) {
+      items.push(`… (${value.length - MAX_PREVIEW_ARRAY_ITEMS} more items)`);
+    }
+    return items;
+  }
+
+  const entries = Object.entries(value);
+  const compacted = {};
+
+  for (const [key, entryValue] of entries.slice(0, MAX_PREVIEW_OBJECT_KEYS)) {
+    compacted[key] = compactForDisplay(entryValue, depth + 1);
+  }
+
+  if (entries.length > MAX_PREVIEW_OBJECT_KEYS) {
+    compacted["…"] = `${entries.length - MAX_PREVIEW_OBJECT_KEYS} more keys`;
+  }
+
+  return compacted;
 }
 
 setView(selectedView);

@@ -191,6 +191,16 @@ button.danger {
   font-size: 0.9rem;
 }
 
+.output-panel pre,
+.panel pre {
+  min-width: 0;
+}
+
+.output-panel pre {
+  max-height: 220px;
+  background: rgba(13, 139, 139, 0.06);
+}
+
 .status-row {
   display: flex;
   justify-content: space-between;
@@ -233,6 +243,10 @@ pre {
   border: 1px solid var(--line);
   font-family: "IBM Plex Mono", monospace;
   background: rgba(255, 255, 255, 0.75);
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 #apiHint {

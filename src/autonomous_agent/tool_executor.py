@@ -51,6 +51,12 @@ class ToolExecutor:
             return {"status": "failed", "error_type": "goal_ambiguity", "error": "Empty task"}
 
         lower = normalized.lower()
+        if lower in {"update_goal_state", "update goal state"}:
+            return {
+                "status": "ok",
+                "output": "Goal state updated.",
+                "error": None,
+            }
         if lower.startswith("search:"):
             return self.web_search(normalized.split(":", 1)[1].strip())
         if lower.startswith("fetch:"):
@@ -60,7 +66,8 @@ class ToolExecutor:
         if lower.startswith("summarize") or lower.startswith("summary"):
             return self._summarize_progress(task=normalized, state=state)
         if self._looks_like_research_task(normalized):
-            return self.web_search(normalized)
+            query = self._build_research_query(normalized, state)
+            return self.web_search(query)
 
         # Fallback keeps arbitrary natural-language steps executable.
         safe_payload = json.dumps(normalized)
@@ -112,6 +119,30 @@ class ToolExecutor:
             "update",
         )
         return any(token in lowered for token in keywords)
+
+    def _build_research_query(self, task: str, state: dict[str, Any] | None) -> str:
+        # Planner steps can be machine-like labels (e.g., check_ai_releases).
+        # Convert them into a search-friendly query and fall back to goal text.
+        normalized_task = task.replace("_", " ").replace("-", " ").strip()
+        goal = (state or {}).get("goal") if state else None
+
+        generic_labels = {
+            "check ai releases",
+            "monitor ai releases",
+            "identify notable changes",
+            "summarize notable changes",
+            "update goal state",
+        }
+
+        if not normalized_task or normalized_task.lower() in generic_labels:
+            if goal:
+                return f"{goal} latest releases notable changes"
+            return "latest ai model releases notable changes"
+
+        if goal and len(normalized_task.split()) <= 3:
+            return f"{goal} {normalized_task}"
+
+        return normalized_task
 
     def web_search(self, query: str) -> dict[str, Any]:
         try:
