@@ -233,7 +233,7 @@ class AgentLoop:
             return self.executor(step, state)
 
         if self.tool_executor is not None:
-            return self.tool_executor.execute_task(step)
+            return self.tool_executor.execute_task(step, state=state)
 
         return self._default_executor(step, state)
 

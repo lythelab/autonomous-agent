@@ -45,7 +45,7 @@ class ToolExecutor:
                     time.sleep(self.retry_delay_seconds)
         return {"status": "failed", "error_type": "tool_error", "error": "unknown"}
 
-    def execute_task(self, task: str) -> dict[str, Any]:
+    def execute_task(self, task: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
         normalized = task.strip()
         if not normalized:
             return {"status": "failed", "error_type": "goal_ambiguity", "error": "Empty task"}
@@ -57,10 +57,53 @@ class ToolExecutor:
             return self.web_fetch(normalized.split(":", 1)[1].strip())
         if lower.startswith("code:"):
             return self.run_code(normalized.split(":", 1)[1].strip())
+        if lower.startswith("summarize") or lower.startswith("summary"):
+            return self._summarize_progress(task=normalized, state=state)
+        if self._looks_like_research_task(normalized):
+            return self.web_search(normalized)
 
         # Fallback keeps arbitrary natural-language steps executable.
         safe_payload = json.dumps(normalized)
         return self.run_code(f"print('TASK:', {safe_payload})")
+
+    def _summarize_progress(self, task: str, state: dict[str, Any] | None) -> dict[str, Any]:
+        if state is None:
+            return self.web_search(task)
+
+        safe_goal = json.dumps(state.get("goal") or "")
+        safe_completed = json.dumps(state.get("completed_steps", []))
+        safe_last_output = json.dumps((state.get("last_result") or {}).get("output") or "")
+        code = (
+            f"goal = {safe_goal}\n"
+            f"completed = {safe_completed}\n"
+            f"last_output = {safe_last_output}\n"
+            "print(f'Goal: {goal}')\n"
+            "if completed:\n"
+            "    print('Completed steps:')\n"
+            "    for step in completed:\n"
+            "        print(f'- {step}')\n"
+            "if last_output:\n"
+            "    print('Latest findings:')\n"
+            "    print(last_output)\n"
+            "print('Summary: Focus notable release updates, compare to prior behavior, and report actionable changes.')\n"
+        )
+        return self.run_code(code)
+
+    def _looks_like_research_task(self, task: str) -> bool:
+        lowered = task.lower()
+        keywords = (
+            "check",
+            "monitor",
+            "research",
+            "identify",
+            "find",
+            "release",
+            "news",
+            "latest",
+            "changes",
+            "update",
+        )
+        return any(token in lowered for token in keywords)
 
     def web_search(self, query: str) -> dict[str, Any]:
         safe_query = json.dumps(query)

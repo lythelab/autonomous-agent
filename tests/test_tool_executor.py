@@ -108,11 +108,28 @@ def test_execute_task_routes_search_prefix() -> None:
     assert any("DDGS" in call for call in sandbox.calls)
 
 
-def test_execute_task_falls_back_to_print_for_plain_text() -> None:
+def test_execute_task_summarize_task_uses_state_context() -> None:
     sandbox = FakeSandbox()
     executor = ToolExecutor(sandbox=sandbox)
 
-    result = executor.execute_task("Summarize the latest run")
+    result = executor.execute_task(
+        "Summarize the latest run",
+        state={
+            "goal": "Monitor AI releases",
+            "completed_steps": ["Check release notes"],
+            "last_result": {"output": "Found release highlights"},
+        },
+    )
 
     assert result["status"] == "ok"
-    assert any("TASK:" in call for call in sandbox.calls)
+    assert any("Summary:" in call for call in sandbox.calls)
+
+
+def test_execute_task_plain_research_text_uses_web_search() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task("Check AI release notes")
+
+    assert result["status"] == "ok"
+    assert any("DDGS" in call for call in sandbox.calls)
