@@ -58,9 +58,9 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/env", response_model=EnvResponse)
-def get_env() -> EnvResponse:
-    return EnvResponse(backend_api_url=os.getenv("BACKEND_API_URL", ""))
+# @app.get("/env", response_model=EnvResponse)
+# def get_env() -> EnvResponse:
+#     return EnvResponse(backend_api_url=os.getenv("BACKEND_API_URL", ""))
 
 
 @app.get("/state")

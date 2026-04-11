@@ -17,15 +17,16 @@ const showBothButton = document.getElementById("showBoth");
 const checkHealthButton = document.getElementById("checkHealth");
 const reloadConfigButton = document.getElementById("reloadConfig");
 
-let backendApiUrl = "";
-let configLoaded = false;
+const BACKEND_API_URL = "http://13.206.89.38/";
+
+const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
 let selectedView = "state";
 
 checkHealthButton.addEventListener("click", checkBackendHealth);
 
 reloadConfigButton.addEventListener("click", async () => {
-  await loadBackendConfig(true);
+  setBackendStatus();
 });
 
 setGoalButton.addEventListener("click", async () => {
@@ -80,11 +81,8 @@ function setView(view) {
 }
 
 async function refreshView() {
-  if (!configLoaded) {
-    await loadBackendConfig();
-  }
-
   if (!backendApiUrl) {
+    apiHint.textContent = "Backend URL is not configured. Set BACKEND_API_URL in frontend/app.js.";
     return;
   }
 
@@ -142,48 +140,21 @@ async function post(path, payload) {
   return response.json();
 }
 
-async function loadBackendConfig(force = false) {
-  if (configLoaded && !force) {
+function setBackendStatus() {
+  if (backendApiUrl) {
+    backendBadge.textContent = "ready";
+    backendBadge.className = "badge completed";
+    apiHint.textContent = `Using configured backend API URL: ${backendApiUrl}`;
     return;
   }
 
-  backendBadge.textContent = "loading";
-  backendBadge.className = "badge";
-  apiHint.textContent = "Loading backend URL from .env...";
-
-  try {
-    const response = await fetch("/env");
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const payload = await response.json();
-    backendApiUrl = normalizeBaseUrl(payload.backend_api_url || "");
-    configLoaded = true;
-
-    if (backendApiUrl) {
-      backendBadge.textContent = "ready";
-      backendBadge.className = "badge completed";
-      apiHint.textContent = `Loaded backend API URL from .env: ${backendApiUrl}`;
-      return;
-    }
-
-    throw new Error("BACKEND_API_URL is empty");
-  } catch (error) {
-    backendApiUrl = "";
-    configLoaded = true;
-    backendBadge.textContent = "error";
-    backendBadge.className = "badge failed";
-    apiHint.textContent = "Could not load backend URL from /env. Verify BACKEND_API_URL in .env and serve the frontend from the same host.";
-    output.textContent = JSON.stringify({ message: error.message }, null, 2);
-  }
+  backendBadge.textContent = "error";
+  backendBadge.className = "badge failed";
+  apiHint.textContent = "Backend URL is not configured. Set BACKEND_API_URL in frontend/app.js.";
+  output.textContent = JSON.stringify({ message: "BACKEND_API_URL is empty" }, null, 2);
 }
 
 async function checkBackendHealth() {
-  if (!configLoaded) {
-    await loadBackendConfig();
-  }
-
   if (!backendApiUrl) {
     apiHint.textContent = "Backend URL is not configured.";
     return;
@@ -242,8 +213,11 @@ function renderState(state, view = "state") {
 }
 
 setView(selectedView);
+setBackendStatus();
 
 refreshView().catch((error) => {
   output.textContent = JSON.stringify({ message: error.message }, null, 2);
-  apiHint.textContent = "Backend URL loading failed. Check BACKEND_API_URL in .env.";
+  apiHint.textContent = `Backend request failed: ${error.message}`;
+  backendBadge.textContent = "error";
+  backendBadge.className = "badge failed";
 });
