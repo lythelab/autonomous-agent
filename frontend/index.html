@@ -21,17 +21,17 @@
         <p class="kicker">AUTONOMOUS AGENT</p>
         <h1>Mission Control Interface</h1>
         <p class="subtitle">
-          Start a goal, run cycles, and inspect state from a Render-hosted API.
+          Start a goal, run cycles, and inspect state from an AWS EC2-hosted API.
         </p>
       </header>
 
       <section class="panel api-panel">
-        <label for="apiUrl">Backend API URL</label>
+        <label for="apiUrl">AWS EC2 API URL</label>
         <div class="row">
-          <input id="apiUrl" type="url" placeholder="https://your-render-service.onrender.com" />
+          <input id="apiUrl" type="url" placeholder="http://ec2-12-34-56-78.compute-1.amazonaws.com" />
           <button id="saveApi">Save</button>
         </div>
-        <p id="apiHint">Saved URL is used for all requests.</p>
+        <p id="apiHint">Use your EC2 public DNS/domain. Saved URL is used for all requests.</p>
       </section>
 
       <section class="panel action-panel">

@@ -1,0 +1,16 @@
+[Unit]
+Description=Autonomous Agent FastAPI Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/autonomous-agent
+EnvironmentFile=/opt/autonomous-agent/.env
+ExecStart=/opt/autonomous-agent/.venv/bin/gunicorn autonomous_agent.api:app -k uvicorn.workers.UvicornWorker --bind 127.0.0.1:8000 --workers 2 --timeout 120
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

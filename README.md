@@ -101,3 +101,11 @@ pytest --tb=short -v
 ```
 
 See `TESTING.md` for coverage details and what each test validates.
+
+## Deploy on AWS EC2
+
+This repository is configured for AWS EC2-style deployment of the API service.
+
+- Systemd unit template: `deploy/autonomous-agent-api.service`
+- Nginx reverse proxy template: `deploy/nginx-autonomous-agent.conf`
+- Step-by-step deployment guide: `temp/instructions.md`

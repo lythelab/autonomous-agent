@@ -18,6 +18,9 @@ const showBothButton = document.getElementById("showBoth");
 
 const storedUrl = localStorage.getItem("agentApiUrl") || "";
 apiInput.value = storedUrl;
+apiHint.textContent = storedUrl
+  ? `Saved: ${storedUrl}`
+  : "Set your AWS EC2 API URL (for example: http://<EC2_PUBLIC_DNS>) and click Save.";
 
 let selectedView = "state";
 
@@ -166,5 +169,5 @@ setView(selectedView);
 
 refreshView().catch((error) => {
   output.textContent = JSON.stringify({ message: error.message }, null, 2);
-  apiHint.textContent = "Set your backend API URL and click Save.";
+  apiHint.textContent = "Set your AWS EC2 API URL and click Save.";
 });
