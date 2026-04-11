@@ -17,7 +17,7 @@ const showBothButton = document.getElementById("showBoth");
 const checkHealthButton = document.getElementById("checkHealth");
 const reloadConfigButton = document.getElementById("reloadConfig");
 
-const BACKEND_API_URL = "http://13.206.89.38/";
+const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
 
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
@@ -182,6 +182,10 @@ async function checkBackendHealth() {
 
 function normalizeBaseUrl(value) {
   return value.trim().replace(/\/$/, "");
+}
+
+function isVercelDeployment() {
+  return window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 }
 
 async function safeText(response) {
