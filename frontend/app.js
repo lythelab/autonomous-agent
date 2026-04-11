@@ -200,7 +200,32 @@ function renderState(state, view = "state") {
   if (!state) {
     return;
   }
-  output.textContent = JSON.stringify(state, null, 2);
+  
+  let displayText = "";
+  const MAX_LENGTH = 3000;
+  
+  if (view === "state" && state.goal !== undefined) {
+    const stateInfo = {
+      goal: state.goal,
+      status: state.status,
+      iterations: state.iterations,
+      completed_steps: state.completed_steps?.length || 0,
+      remaining_steps: state.remaining_steps?.length || 0,
+      failure_count: state.failure_count,
+    };
+    if (state.last_result?.output) {
+      stateInfo.last_output = state.last_result.output.substring(0, 500);
+    }
+    displayText = JSON.stringify(stateInfo, null, 2);
+  } else {
+    displayText = JSON.stringify(state, null, 2);
+  }
+  
+  if (displayText.length > MAX_LENGTH) {
+    displayText = displayText.substring(0, MAX_LENGTH) + "\n\n... (output truncated)";
+  }
+  
+  output.textContent = displayText;
   let badgeText = state.status || "idle";
   let badgeClass = state.status || "idle";
 

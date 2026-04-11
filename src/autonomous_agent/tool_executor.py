@@ -70,24 +70,32 @@ class ToolExecutor:
         if state is None:
             return self.web_search(task)
 
-        safe_goal = json.dumps(state.get("goal") or "")
-        safe_completed = json.dumps(state.get("completed_steps", []))
-        safe_last_output = json.dumps((state.get("last_result") or {}).get("output") or "")
-        code = (
-            f"goal = {safe_goal}\n"
-            f"completed = {safe_completed}\n"
-            f"last_output = {safe_last_output}\n"
-            "print(f'Goal: {goal}')\n"
-            "if completed:\n"
-            "    print('Completed steps:')\n"
-            "    for step in completed:\n"
-            "        print(f'- {step}')\n"
-            "if last_output:\n"
-            "    print('Latest findings:')\n"
-            "    print(last_output)\n"
-            "print('Summary: Focus notable release updates, compare to prior behavior, and report actionable changes.')\n"
-        )
-        return self.run_code(code)
+        goal = state.get("goal") or ""
+        completed = state.get("completed_steps", [])
+        last_output = (state.get("last_result") or {}).get("output") or ""
+        
+        summary_lines = [
+            f"Goal: {goal}"
+        ]
+        
+        if completed:
+            summary_lines.append("Completed steps:")
+            for step in completed:
+                summary_lines.append(f"  - {step}")
+        
+        if last_output:
+            summary_lines.append("Latest findings:")
+            truncated = last_output[:500] if len(last_output) > 500 else last_output
+            summary_lines.append(truncated)
+        
+        summary_lines.append("Summary: Focus notable release updates and report actionable changes.")
+        
+        output = "\n".join(summary_lines)
+        return {
+            "status": "ok",
+            "output": output,
+            "error": None,
+        }
 
     def _looks_like_research_task(self, task: str) -> bool:
         lowered = task.lower()
@@ -106,23 +114,52 @@ class ToolExecutor:
         return any(token in lowered for token in keywords)
 
     def web_search(self, query: str) -> dict[str, Any]:
-        safe_query = json.dumps(query)
-        code = (
-            "from duckduckgo_search import DDGS\n"
-            f"results = list(DDGS().text({safe_query}, max_results=5))\n"
-            "for item in results:\n"
-            "    print(item.get('title', ''), '-', item.get('href', ''))\n"
-        )
-        return self.run_code(code)
+        try:
+            from duckduckgo_search import DDGS
+        except ImportError:
+            return {
+                "status": "failed",
+                "error_type": "tool_error",
+                "error": "duckduckgo-search not installed",
+            }
+        
+        try:
+            results = list(DDGS().text(query, max_results=5))
+            lines = []
+            for item in results:
+                title = item.get("title", "")
+                href = item.get("href", "")
+                lines.append(f"{title} - {href}")
+            
+            output = "\n".join(lines) if lines else "No results found"
+            return {
+                "status": "ok",
+                "output": output,
+                "error": None,
+            }
+        except Exception as exc:
+            return {
+                "status": "failed",
+                "error_type": "tool_error",
+                "error": str(exc),
+            }
 
     def web_fetch(self, url: str) -> dict[str, Any]:
-        safe_url = json.dumps(url)
-        code = (
-            "import urllib.request\n"
-            f"with urllib.request.urlopen({safe_url}, timeout=10) as response:\n"
-            "    print(response.read(2000).decode('utf-8', errors='ignore'))\n"
-        )
-        return self.run_code(code)
+        try:
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=10) as response:
+                content = response.read(2000).decode("utf-8", errors="ignore")
+                return {
+                    "status": "ok",
+                    "output": content,
+                    "error": None,
+                }
+        except Exception as exc:
+            return {
+                "status": "failed",
+                "error_type": "tool_error",
+                "error": str(exc),
+            }
 
     def keep_alive(self) -> None:
         self.sandbox.run_code("print('ping')")
