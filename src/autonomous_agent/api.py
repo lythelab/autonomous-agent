@@ -46,10 +46,17 @@ class EnvResponse(BaseModel):
 def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
     full_episodes = list(reversed(_agent.memory.get_full_episodes()))
     safe_limit = max(1, min(limit, 100))
+    tool_executor = getattr(_agent, "tool_executor", None)
     return {
         "summary": _agent.memory.get_summary(),
         "recent_episodes": full_episodes[:safe_limit],
         "count": len(full_episodes),
+        "executor": {
+            "enabled": tool_executor is not None,
+            "sandbox_provider": getattr(tool_executor, "sandbox_provider", None),
+            "fallback_active": getattr(tool_executor, "fallback_active", None),
+            "last_sandbox_error": getattr(tool_executor, "last_sandbox_error", None),
+        },
     }
 
 

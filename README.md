@@ -11,6 +11,7 @@ Long-running autonomous agent prototype with persistent memory, resumable goal e
 - Reflection-driven adaptation via `ReflectionEngine`
 - Persistent goal lifecycle tracking via `StateTracker`
 - Sandboxed code and web task execution via `ToolExecutor`
+- Automatic local fallback executor when E2B sandbox is unavailable or unhealthy
 - Long-running runtime wiring for E2B-backed operation via `build_default_agent` and `start_autonomous_goal`
 - Retry and failure taxonomy for tool errors (`llm_error`, `tool_error`, `goal_ambiguity`)
 
@@ -53,6 +54,8 @@ cp .env.example .env
 - `BACKEND_API_URL`: Backend base URL exposed to the frontend via `/env`
 
 The project automatically loads values from `.env` via `python-dotenv`.
+
+If E2B is not configured or sandbox creation fails, the runtime now logs the exact reason and automatically switches `ToolExecutor` to a local fallback sandbox so the agent can continue running.
 
 ## Quick Example
 

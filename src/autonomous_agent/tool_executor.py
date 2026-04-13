@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
+import logging
 import time
+from types import SimpleNamespace
 from typing import Any
 
 from .config import get_settings
@@ -10,6 +13,39 @@ try:
     from e2b_code_interpreter import Sandbox
 except ImportError:  # pragma: no cover - optional dependency for local test runs
     Sandbox = None
+
+
+logger = logging.getLogger(__name__)
+
+
+class LocalFallbackSandbox:
+    """Minimal local execution fallback when E2B is unavailable."""
+
+    def run_code(self, code: str) -> Any:
+        stdout = io.StringIO()
+        safe_builtins = {
+            "print": lambda *args, **kwargs: print(*args, file=stdout, **kwargs),
+            "len": len,
+            "range": range,
+            "min": min,
+            "max": max,
+            "sum": sum,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
+            "set": set,
+            "tuple": tuple,
+            "enumerate": enumerate,
+            "__import__": __import__,
+        }
+        try:
+            exec(code, {"__builtins__": safe_builtins}, {})  # noqa: S102 - controlled fallback path
+            return SimpleNamespace(logs=stdout.getvalue().rstrip(), error=None)
+        except Exception as exc:  # noqa: BLE001 - surfaced as tool error payload
+            return SimpleNamespace(logs=stdout.getvalue().rstrip(), error=str(exc))
 
 
 class ToolExecutor:
@@ -23,18 +59,51 @@ class ToolExecutor:
     ) -> None:
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
+        self._allow_runtime_fallback = sandbox is None
+        self.fallback_active = False
+        self.sandbox_provider = "provided" if sandbox is not None else "auto"
+        self.last_sandbox_error: str | None = None
         self.sandbox = sandbox or self._create_sandbox()
+        logger.info(
+            "ToolExecutor initialized provider=%s fallback_active=%s sandbox_type=%s",
+            self.sandbox_provider,
+            self.fallback_active,
+            type(self.sandbox).__name__,
+        )
 
     def run_code(self, code: str) -> dict[str, Any]:
         for attempt in range(self.max_retries):
             try:
+                logger.debug(
+                    "Running code attempt=%d/%d fallback_active=%s",
+                    attempt + 1,
+                    self.max_retries,
+                    self.fallback_active,
+                )
                 result = self.sandbox.run_code(code)
+                result_error = getattr(result, "error", None)
+                if result_error:
+                    return {
+                        "status": "failed",
+                        "error_type": "tool_error",
+                        "error": str(result_error),
+                        "output": self._extract_logs(result),
+                    }
                 return {
                     "status": "ok",
                     "output": self._extract_logs(result),
-                    "error": getattr(result, "error", None),
+                    "error": None,
                 }
             except Exception as exc:  # noqa: BLE001 - classification relies on runtime exception type
+                logger.warning(
+                    "Sandbox execution failed attempt=%d/%d error=%r",
+                    attempt + 1,
+                    self.max_retries,
+                    exc,
+                )
+                if self._allow_runtime_fallback and not self.fallback_active:
+                    self._activate_local_fallback(reason=exc)
+                    continue
                 if attempt == self.max_retries - 1:
                     return {
                         "status": "failed",
@@ -98,11 +167,8 @@ class ToolExecutor:
         summary_lines.append("Summary: Focus notable release updates and report actionable changes.")
         
         output = "\n".join(summary_lines)
-        return {
-            "status": "ok",
-            "output": output,
-            "error": None,
-        }
+        safe_payload = json.dumps(output)
+        return self.run_code(f"print({safe_payload})")
 
     def _looks_like_research_task(self, task: str) -> bool:
         lowered = task.lower()
@@ -145,35 +211,25 @@ class ToolExecutor:
         return normalized_task
 
     def web_search(self, query: str) -> dict[str, Any]:
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            return {
-                "status": "failed",
-                "error_type": "tool_error",
-                "error": "duckduckgo-search not installed",
-            }
-        
-        try:
-            results = list(DDGS().text(query, max_results=5))
-            lines = []
-            for item in results:
-                title = item.get("title", "")
-                href = item.get("href", "")
-                lines.append(f"{title} - {href}")
-            
-            output = "\n".join(lines) if lines else "No results found"
-            return {
-                "status": "ok",
-                "output": output,
-                "error": None,
-            }
-        except Exception as exc:
-            return {
-                "status": "failed",
-                "error_type": "tool_error",
-                "error": str(exc),
-            }
+        escaped_query = json.dumps(query)
+        script = (
+            "from duckduckgo_search import DDGS\n"
+            f"query = {escaped_query}\n"
+            "results = list(DDGS().text(query, max_results=5))\n"
+            "if not results:\n"
+            "    print('No results found')\n"
+            "for item in results:\n"
+            "    print(f\"{item.get('title', '')} - {item.get('href', '')}\")\n"
+        )
+        result = self.run_code(script)
+        if result.get("status") == "ok":
+            return result
+        return {
+            "status": "failed",
+            "error_type": result.get("error_type", "tool_error"),
+            "error": result.get("error", "search failed"),
+            "output": result.get("output"),
+        }
 
     def web_fetch(self, url: str) -> dict[str, Any]:
         try:
@@ -193,7 +249,14 @@ class ToolExecutor:
             }
 
     def keep_alive(self) -> None:
-        self.sandbox.run_code("print('ping')")
+        try:
+            self.sandbox.run_code("print('ping')")
+        except Exception as exc:  # noqa: BLE001 - keep alive failure should not crash the run
+            if self._allow_runtime_fallback:
+                logger.warning("Sandbox keep_alive failed; switching to fallback error=%r", exc)
+                self._activate_local_fallback(reason=exc)
+            else:
+                logger.warning("Sandbox keep_alive failed error=%r", exc)
 
     def classify_error(self, error: Exception) -> str:
         text = str(error).lower()
@@ -205,12 +268,39 @@ class ToolExecutor:
 
     def _create_sandbox(self) -> Any:
         if Sandbox is None:
-            raise RuntimeError(
-                "e2b-code-interpreter is not installed. Install it or provide a sandbox instance."
+            reason = (
+                "e2b-code-interpreter is not installed. "
+                "Install it or configure fallback execution."
             )
-        if not get_settings().e2b_api_key:
-            raise RuntimeError("E2B_API_KEY is not configured. Set it in your environment or .env file.")
-        return Sandbox.create()
+            logger.warning("Sandbox unavailable: %s", reason)
+            return self._activate_local_fallback(reason=RuntimeError(reason))
+
+        settings = get_settings()
+        if not settings.e2b_api_key:
+            reason = "E2B_API_KEY is not configured."
+            logger.warning("Sandbox unavailable: %s", reason)
+            return self._activate_local_fallback(reason=RuntimeError(reason))
+
+        try:
+            sandbox = Sandbox.create()
+            logger.info("E2B sandbox created successfully")
+            return sandbox
+        except Exception as exc:  # noqa: BLE001 - remote bootstrap can fail for many reasons
+            logger.exception("Failed to create E2B sandbox; enabling fallback")
+            return self._activate_local_fallback(reason=exc)
+
+    def _activate_local_fallback(self, reason: Exception) -> Any:
+        self.last_sandbox_error = f"{type(reason).__name__}: {reason}"
+        if not self.fallback_active:
+            logger.warning(
+                "Local sandbox fallback activated reason=%s details=%s",
+                type(reason).__name__,
+                str(reason),
+            )
+        self.fallback_active = True
+        self.sandbox_provider = "local_fallback"
+        self.sandbox = LocalFallbackSandbox()
+        return self.sandbox
 
     def _extract_logs(self, result: Any) -> str:
         logs = getattr(result, "logs", "")

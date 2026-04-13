@@ -36,9 +36,15 @@ def build_default_agent(
     reflection_engine = ReflectionEngine()
     try:
         tool_executor = ToolExecutor()
-    except RuntimeError:
-        # Allow booting in environments without E2B so the API can still run
+        logger.info(
+            "Tool executor ready provider=%s fallback_active=%s",
+            getattr(tool_executor, "sandbox_provider", "unknown"),
+            getattr(tool_executor, "fallback_active", False),
+        )
+    except RuntimeError as exc:
+        # Allow booting in constrained environments so the API can still run
         # using the loop's default executor.
+        logger.warning("ToolExecutor initialization failed; continuing without it error=%s", exc)
         tool_executor = None
 
     return AgentLoop(
