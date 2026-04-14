@@ -11,9 +11,16 @@ Long-running autonomous agent prototype with persistent memory, resumable goal e
 - Reflection-driven adaptation via `ReflectionEngine`
 - Persistent goal lifecycle tracking via `StateTracker`
 - Sandboxed code and web task execution via `ToolExecutor`
+- Dedicated E2B sandbox session factory via `E2BHandler`
 - Automatic local fallback executor when E2B sandbox is unavailable or unhealthy
 - Long-running runtime wiring for E2B-backed operation via `build_default_agent` and `start_autonomous_goal`
 - Retry and failure taxonomy for tool errors (`llm_error`, `tool_error`, `goal_ambiguity`)
+
+## Deployment Architecture
+
+- Frontend: static app in `frontend/`, deploy to Vercel
+- Backend: FastAPI service in `src/autonomous_agent/api.py`
+- Execution runtime: agent code and tool execution in E2B sandboxes managed by `E2BHandler`
 
 ## Project Layout
 
@@ -22,6 +29,7 @@ Long-running autonomous agent prototype with persistent memory, resumable goal e
 - `src/autonomous_agent/task_planner.py`: Goal decomposition and replanning
 - `src/autonomous_agent/reflection_engine.py`: Outcome evaluation and strategy hints
 - `src/autonomous_agent/state_tracker.py`: Persistent goal state helper
+- `src/autonomous_agent/e2b_handler.py`: E2B sandbox creation and lifecycle helpers
 - `src/autonomous_agent/tool_executor.py`: Sandboxed code/web execution with retries
 - `src/autonomous_agent/runtime.py`: Default production wiring for long-running runs
 - `tests/test_memory_manager.py`: Memory manager unit tests
@@ -47,6 +55,8 @@ cp .env.example .env
 - `GROQ_API_KEY`: Required only when using Groq-backed memory summarization
 - `GROQ_MODEL`: Optional override for summarization model (defaults to `llama-3.3-70b-versatile`)
 - `E2B_API_KEY`: Required only when creating a real E2B `Sandbox` in `ToolExecutor`
+- `E2B_TEMPLATE`: Optional E2B sandbox template name/id used by `E2BHandler`
+- `E2B_REQUIRE_SANDBOX`: Set to `true` to fail startup when E2B sandbox is unavailable
 - `AGENT_DB_PATH`: Default SQLite state file path
 - `AGENT_MAX_FULL_EPISODES`: Compression threshold for full episodes
 - `AGENT_MAX_ITERATIONS`: Safety cap for long-running loops

@@ -38,6 +38,11 @@ class MemoryManager:
         # Initialize schema once
         self._initialize_schema()
 
+    def close(self) -> None:
+        """Compatibility no-op for callers/tests expecting explicit cleanup."""
+        # Connections are opened per operation via context managers.
+        return
+
     # ---------------------------
     # Connection Handling (KEY FIX)
     # ---------------------------

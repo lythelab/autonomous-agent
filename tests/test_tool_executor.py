@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from autonomous_agent import ToolExecutor
+from autonomous_agent import tool_executor as tool_executor_module
 
 
 class FakeSandbox:
@@ -146,3 +147,51 @@ def test_execute_task_underscore_step_uses_goal_query() -> None:
 
     assert result["status"] == "ok"
     assert any("Monitor AI releases and summarize notable changes" in call for call in sandbox.calls)
+
+
+def test_executor_uses_fallback_when_e2b_create_fails(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        e2b_api_key="test",
+        e2b_template=None,
+        e2b_require_sandbox=False,
+    )
+
+    class BrokenHandler:
+        def __init__(self, _config: Any) -> None:
+            pass
+
+        def create_sandbox(self) -> Any:
+            raise RuntimeError("e2b unavailable")
+
+    monkeypatch.setattr(tool_executor_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(tool_executor_module, "E2BHandler", BrokenHandler)
+
+    executor = ToolExecutor()
+
+    assert executor.fallback_active is True
+    assert executor.sandbox_provider == "local_fallback"
+
+
+def test_executor_raises_when_e2b_required(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        e2b_api_key="test",
+        e2b_template=None,
+        e2b_require_sandbox=True,
+    )
+
+    class BrokenHandler:
+        def __init__(self, _config: Any) -> None:
+            pass
+
+        def create_sandbox(self) -> Any:
+            raise RuntimeError("e2b unavailable")
+
+    monkeypatch.setattr(tool_executor_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(tool_executor_module, "E2BHandler", BrokenHandler)
+
+    try:
+        ToolExecutor()
+    except RuntimeError as exc:
+        assert "required" in str(exc).lower()
+    else:
+        raise AssertionError("Expected RuntimeError when E2B sandbox is required")

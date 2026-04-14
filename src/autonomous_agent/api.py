@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from .config import get_settings
 from .runtime import build_default_agent
 
 app = FastAPI(title="Autonomous Agent API", version="0.1.0")
@@ -41,6 +42,8 @@ class RunRequest(BaseModel):
 
 class EnvResponse(BaseModel):
     backend_api_url: str = Field(default="", description="Backend API base URL configured via environment")
+    e2b_enabled: bool = Field(default=False, description="Whether E2B API key is configured")
+    e2b_template: str | None = Field(default=None, description="Configured E2B template")
 
 
 def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
@@ -65,9 +68,14 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# @app.get("/env", response_model=EnvResponse)
-# def get_env() -> EnvResponse:
-#     return EnvResponse(backend_api_url=os.getenv("BACKEND_API_URL", ""))
+@app.get("/env", response_model=EnvResponse)
+def get_env() -> EnvResponse:
+    settings = get_settings()
+    return EnvResponse(
+        backend_api_url=os.getenv("BACKEND_API_URL", ""),
+        e2b_enabled=bool(settings.e2b_api_key),
+        e2b_template=settings.e2b_template,
+    )
 
 
 @app.get("/state")

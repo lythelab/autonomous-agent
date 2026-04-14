@@ -8,11 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from .config import get_settings
-
-try:
-    from e2b_code_interpreter import Sandbox
-except ImportError:  # pragma: no cover - optional dependency for local test runs
-    Sandbox = None
+from .e2b_handler import E2BHandler, E2BHandlerConfig
 
 
 logger = logging.getLogger(__name__)
@@ -267,25 +263,24 @@ class ToolExecutor:
         return "goal_ambiguity"
 
     def _create_sandbox(self) -> Any:
-        if Sandbox is None:
-            reason = (
-                "e2b-code-interpreter is not installed. "
-                "Install it or configure fallback execution."
-            )
-            logger.warning("Sandbox unavailable: %s", reason)
-            return self._activate_local_fallback(reason=RuntimeError(reason))
-
         settings = get_settings()
-        if not settings.e2b_api_key:
-            reason = "E2B_API_KEY is not configured."
-            logger.warning("Sandbox unavailable: %s", reason)
-            return self._activate_local_fallback(reason=RuntimeError(reason))
+
+        handler = E2BHandler(
+            E2BHandlerConfig(
+                api_key=settings.e2b_api_key,
+                template=settings.e2b_template,
+                metadata={"service": "autonomous-agent"},
+                require_sandbox=settings.e2b_require_sandbox,
+            )
+        )
 
         try:
-            sandbox = Sandbox.create()
+            sandbox = handler.create_sandbox()
             logger.info("E2B sandbox created successfully")
             return sandbox
         except Exception as exc:  # noqa: BLE001 - remote bootstrap can fail for many reasons
+            if settings.e2b_require_sandbox:
+                raise RuntimeError(f"E2B sandbox required but unavailable: {exc}") from exc
             logger.exception("Failed to create E2B sandbox; enabling fallback")
             return self._activate_local_fallback(reason=exc)
 
