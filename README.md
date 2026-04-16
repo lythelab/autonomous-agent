@@ -56,6 +56,7 @@ cp .env.example .env
 - `GROQ_MODEL`: Optional override for summarization model (defaults to `llama-3.3-70b-versatile`)
 - `E2B_API_KEY`: Required only when creating a real E2B `Sandbox` in `ToolExecutor`
 - `E2B_TEMPLATE`: Optional E2B sandbox template name/id used by `E2BHandler`
+- `E2B_TIMEOUT_SECONDS`: Optional sandbox TTL/timeout value forwarded during E2B sandbox creation
 - `E2B_REQUIRE_SANDBOX`: Set to `true` to fail startup when E2B sandbox is unavailable
 - `AGENT_DB_PATH`: Default SQLite state file path
 - `AGENT_MAX_FULL_EPISODES`: Compression threshold for full episodes
@@ -65,7 +66,7 @@ cp .env.example .env
 
 The project automatically loads values from `.env` via `python-dotenv`.
 
-If E2B is not configured or sandbox creation fails, the runtime now logs the exact reason and automatically switches `ToolExecutor` to a local fallback sandbox so the agent can continue running.
+If E2B is not configured or sandbox creation fails, the runtime logs the exact reason and automatically switches `ToolExecutor` to a local fallback sandbox so the agent can continue running. When a running E2B session expires (for example `sandbox was not found`), `ToolExecutor` attempts to recreate a fresh sandbox before fallback.
 
 ## Quick Example
 

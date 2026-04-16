@@ -97,6 +97,10 @@ class ToolExecutor:
                     self.max_retries,
                     exc,
                 )
+                if self._should_recreate_sandbox(exc):
+                    recreated = self._recreate_sandbox(reason=exc)
+                    if recreated:
+                        continue
                 if self._allow_runtime_fallback and not self.fallback_active:
                     self._activate_local_fallback(reason=exc)
                     continue
@@ -249,6 +253,10 @@ class ToolExecutor:
             self.sandbox.run_code("print('ping')")
         except Exception as exc:  # noqa: BLE001 - keep alive failure should not crash the run
             if self._allow_runtime_fallback:
+                if self._should_recreate_sandbox(exc):
+                    recreated = self._recreate_sandbox(reason=exc)
+                    if recreated:
+                        return
                 logger.warning("Sandbox keep_alive failed; switching to fallback error=%r", exc)
                 self._activate_local_fallback(reason=exc)
             else:
@@ -258,24 +266,24 @@ class ToolExecutor:
         text = str(error).lower()
         if "rate_limit" in text or "429" in text:
             return "llm_error"
+        if "sandbox" in text and "not found" in text:
+            return "tool_error"
         if isinstance(error, (TimeoutError, ConnectionError)):
             return "tool_error"
         return "goal_ambiguity"
 
     def _create_sandbox(self) -> Any:
         settings = get_settings()
+        return self._create_sandbox_with_settings(settings)
 
-        handler = E2BHandler(
-            E2BHandlerConfig(
-                api_key=settings.e2b_api_key,
-                template=settings.e2b_template,
-                metadata={"service": "autonomous-agent"},
-                require_sandbox=settings.e2b_require_sandbox,
-            )
-        )
+    def _create_sandbox_with_settings(self, settings: Any) -> Any:
+        handler = self._build_e2b_handler(settings)
 
         try:
             sandbox = handler.create_sandbox()
+            self.fallback_active = False
+            self.sandbox_provider = "e2b"
+            self.last_sandbox_error = None
             logger.info("E2B sandbox created successfully")
             return sandbox
         except Exception as exc:  # noqa: BLE001 - remote bootstrap can fail for many reasons
@@ -283,6 +291,47 @@ class ToolExecutor:
                 raise RuntimeError(f"E2B sandbox required but unavailable: {exc}") from exc
             logger.exception("Failed to create E2B sandbox; enabling fallback")
             return self._activate_local_fallback(reason=exc)
+
+    def _build_e2b_handler(self, settings: Any) -> E2BHandler:
+        handler = E2BHandler(
+            E2BHandlerConfig(
+                api_key=settings.e2b_api_key,
+                template=settings.e2b_template,
+                timeout_seconds=getattr(settings, "e2b_timeout_seconds", None),
+                metadata={"service": "autonomous-agent"},
+                require_sandbox=settings.e2b_require_sandbox,
+            )
+        )
+        return handler
+
+    def _should_recreate_sandbox(self, error: Exception) -> bool:
+        if not self._allow_runtime_fallback:
+            return False
+
+        text = str(error).lower()
+        stale_markers = (
+            "sandbox was not found",
+            "sandbox not found",
+            '"sandboxid"',
+        )
+        if any(marker in text for marker in stale_markers) and "not found" in text:
+            return True
+
+        return False
+
+    def _recreate_sandbox(self, reason: Exception) -> bool:
+        logger.warning("Attempting sandbox recreation after runtime error=%r", reason)
+        settings = get_settings()
+
+        try:
+            self.sandbox = self._create_sandbox_with_settings(settings)
+            return not self.fallback_active
+        except Exception as exc:  # noqa: BLE001 - preserve failure details for API status
+            logger.exception("Sandbox recreation failed error=%r", exc)
+            if settings.e2b_require_sandbox:
+                raise
+            self._activate_local_fallback(reason=exc)
+            return False
 
     def _activate_local_fallback(self, reason: Exception) -> Any:
         self.last_sandbox_error = f"{type(reason).__name__}: {reason}"

@@ -7,6 +7,7 @@ def test_settings_reads_environment(monkeypatch) -> None:
     monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
     monkeypatch.setenv("E2B_API_KEY", "e2b_test")
     monkeypatch.setenv("E2B_TEMPLATE", "agent-template")
+    monkeypatch.setenv("E2B_TIMEOUT_SECONDS", "1800")
     monkeypatch.setenv("E2B_REQUIRE_SANDBOX", "true")
     monkeypatch.setenv("AGENT_DB_PATH", "data/custom.db")
     monkeypatch.setenv("AGENT_MAX_FULL_EPISODES", "30")
@@ -19,6 +20,7 @@ def test_settings_reads_environment(monkeypatch) -> None:
     assert settings.groq_api_key == "gsk_test"
     assert settings.e2b_api_key == "e2b_test"
     assert settings.e2b_template == "agent-template"
+    assert settings.e2b_timeout_seconds == 1800
     assert settings.e2b_require_sandbox is True
     assert settings.agent_db_path == "data/custom.db"
     assert settings.max_full_episodes == 30

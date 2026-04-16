@@ -15,6 +15,7 @@ class E2BHandlerConfig:
     api_key: str | None
     template: str | None = None
     metadata: dict[str, str] | None = None
+    timeout_seconds: int | None = None
     require_sandbox: bool = False
 
 
@@ -42,21 +43,35 @@ class E2BHandler:
             kwargs["template"] = self.config.template
         if self.config.metadata:
             kwargs["metadata"] = self.config.metadata
+        if self.config.timeout_seconds is not None:
+            kwargs["timeout"] = self.config.timeout_seconds
 
         try:
-            return create(**kwargs)
+            sandbox = create(**kwargs)
         except TypeError:
             # Support older SDK signatures by retrying with fewer kwargs.
-            if "metadata" in kwargs:
-                kwargs.pop("metadata")
+            for key in ("metadata", "timeout", "template"):
+                if key not in kwargs:
+                    continue
+                kwargs.pop(key)
                 try:
-                    return create(**kwargs)
+                    sandbox = create(**kwargs)
+                    break
                 except TypeError:
+                    continue
+            else:
+                raise
+
+        if self.config.timeout_seconds is not None:
+            set_timeout = getattr(sandbox, "set_timeout", None)
+            if callable(set_timeout):
+                try:
+                    set_timeout(self.config.timeout_seconds)
+                except TypeError:
+                    # Some SDK versions expose a no-arg or different timeout signature.
                     pass
-            if "template" in kwargs:
-                kwargs.pop("template")
-                return create(**kwargs)
-            raise
+
+        return sandbox
 
     @staticmethod
     def close_sandbox(sandbox: Any) -> None:

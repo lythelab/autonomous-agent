@@ -36,6 +36,17 @@ class TimeoutSandbox:
         raise TimeoutError("timed out")
 
 
+class MissingSandboxErrorSandbox:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def run_code(self, code: str) -> Any:
+        self.calls += 1
+        raise Exception(
+            'TimeoutException: {"sandboxId":"abc","message":"The sandbox was not found","code":502}'
+        )
+
+
 def test_run_code_returns_output() -> None:
     executor = ToolExecutor(sandbox=FakeSandbox())
 
@@ -74,6 +85,27 @@ def test_tool_fails_after_max_retries() -> None:
     assert result["status"] == "failed"
     assert result["error_type"] == "tool_error"
     assert sandbox.calls == 3
+
+
+def test_executor_recreates_stale_sandbox_before_fallback(monkeypatch) -> None:
+    stale = MissingSandboxErrorSandbox()
+    healthy = FakeSandbox()
+    sandboxes = [stale, healthy]
+    calls = {"create": 0}
+
+    def fake_create_sandbox_with_settings(self: ToolExecutor, _settings: Any) -> Any:
+        index = calls["create"]
+        calls["create"] += 1
+        return sandboxes[index]
+
+    monkeypatch.setattr(ToolExecutor, "_create_sandbox_with_settings", fake_create_sandbox_with_settings)
+
+    executor = ToolExecutor()
+    result = executor.run_code("print('recovered')")
+
+    assert result["status"] == "ok"
+    assert calls["create"] == 2
+    assert executor.fallback_active is False
 
 
 def test_rate_limit_classified_as_llm_error() -> None:
