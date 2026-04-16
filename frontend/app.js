@@ -18,16 +18,20 @@ const showLogsButton = document.getElementById("showLogs");
 const showBothButton = document.getElementById("showBoth");
 const checkHealthButton = document.getElementById("checkHealth");
 const reloadConfigButton = document.getElementById("reloadConfig");
+const wrapToggle = document.getElementById("wrapToggle");
+const copyVisibleButton = document.getElementById("copyVisible");
+const downloadVisibleButton = document.getElementById("downloadVisible");
+const statIterations = document.getElementById("statIterations");
+const statFailures = document.getElementById("statFailures");
+const statCompleted = document.getElementById("statCompleted");
+const statRemaining = document.getElementById("statRemaining");
 
 const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
 
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
 let selectedView = "state";
-const MAX_PREVIEW_STRING_LENGTH = 300;
-const MAX_PREVIEW_ARRAY_ITEMS = 12;
-const MAX_PREVIEW_OBJECT_KEYS = 20;
-const MAX_PREVIEW_DEPTH = 4;
+let currentRenderedPayload = null;
 
 checkHealthButton.addEventListener("click", checkBackendHealth);
 
@@ -75,6 +79,47 @@ showLogsButton.addEventListener("click", async () => {
 showBothButton.addEventListener("click", async () => {
   setView("both");
   await refreshView();
+});
+
+wrapToggle.addEventListener("change", () => {
+  const shouldWrap = wrapToggle.checked;
+  latestOutput.classList.toggle("wrap", shouldWrap);
+  output.classList.toggle("wrap", shouldWrap);
+});
+
+copyVisibleButton.addEventListener("click", async () => {
+  const payload = currentRenderedPayload;
+  if (!payload) {
+    apiHint.textContent = "Nothing available to copy yet.";
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    apiHint.textContent = "Visible JSON copied to clipboard.";
+  } catch (error) {
+    apiHint.textContent = `Copy failed: ${error.message}`;
+  }
+});
+
+downloadVisibleButton.addEventListener("click", () => {
+  const payload = currentRenderedPayload;
+  if (!payload) {
+    apiHint.textContent = "Nothing available to download yet.";
+    return;
+  }
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  anchor.href = url;
+  anchor.download = `autonomous-agent-${selectedView}-${timestamp}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+  apiHint.textContent = "Visible JSON downloaded.";
 });
 
 function setView(view) {
@@ -207,7 +252,6 @@ function renderState(state, view = "state") {
     return;
   }
 
-  let displayText = "";
   const latestOutputText = extractLatestOutput(state, view);
 
   if (latestOutput) {
@@ -216,21 +260,12 @@ function renderState(state, view = "state") {
     outputBadge.className = `badge ${latestOutputText ? "completed" : "idle"}`;
   }
 
-  if (view === "state" && state.goal !== undefined) {
-    const stateInfo = {
-      goal: state.goal,
-      status: state.status,
-      iterations: state.iterations,
-      completed_steps: countItems(state.completed_steps),
-      remaining_steps: countItems(state.remaining_steps),
-      failure_count: state.failure_count,
-    };
-    displayText = JSON.stringify(compactForDisplay(stateInfo), null, 2);
-  } else {
-    displayText = JSON.stringify(compactForDisplay(state), null, 2);
-  }
-  
-  output.textContent = displayText;
+  currentRenderedPayload = state;
+  output.textContent = JSON.stringify(state, null, 2);
+
+  const stateForStats = view === "both" ? state.state || {} : view === "state" ? state : {};
+  renderStats(stateForStats);
+
   let badgeText = state.status || "idle";
   let badgeClass = state.status || "idle";
 
@@ -246,6 +281,14 @@ function renderState(state, view = "state") {
   statusBadge.className = `badge ${badgeClass}`;
 }
 
+function renderStats(state) {
+  const hasState = state && typeof state === "object";
+  statIterations.textContent = hasState ? String(state.iterations ?? "-") : "-";
+  statFailures.textContent = hasState ? String(state.failure_count ?? "-") : "-";
+  statCompleted.textContent = hasState ? String(countItems(state.completed_steps)) : "-";
+  statRemaining.textContent = hasState ? String(countItems(state.remaining_steps)) : "-";
+}
+
 function extractLatestOutput(state, view) {
   if (!state) {
     return "";
@@ -256,11 +299,11 @@ function extractLatestOutput(state, view) {
   }
 
   if (typeof state.last_output === "string" && state.last_output.trim()) {
-    return compactForDisplay(state.last_output);
+    return state.last_output;
   }
 
   if (typeof state.last_result?.output === "string" && state.last_result.output.trim()) {
-    return compactForDisplay(state.last_result.output);
+    return state.last_result.output;
   }
 
   if (view === "logs") {
@@ -269,7 +312,7 @@ function extractLatestOutput(state, view) {
       const episodeValue = episode?.value || {};
       const candidate = episodeValue?.result?.output || episodeValue?.output || episodeValue?.last_output;
       if (typeof candidate === "string" && candidate.trim()) {
-        return compactForDisplay(candidate);
+        return candidate;
       }
     }
   }
@@ -287,59 +330,6 @@ function countItems(value) {
   }
 
   return 0;
-}
-
-function compactForDisplay(value, depth = 0) {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    if (value.length <= MAX_PREVIEW_STRING_LENGTH) {
-      return value;
-    }
-
-    return `${value.slice(0, MAX_PREVIEW_STRING_LENGTH)}… (truncated)`;
-  }
-
-  if (typeof value !== "object") {
-    return value;
-  }
-
-  if (depth >= MAX_PREVIEW_DEPTH) {
-    if (Array.isArray(value)) {
-      return `[${value.length} items]`;
-    }
-
-    const keys = Object.keys(value);
-    if (keys.length === 0) {
-      return "{}";
-    }
-
-    const previewKeys = keys.slice(0, 3);
-    return `{ ${previewKeys.join(", ")}${keys.length > previewKeys.length ? ", ..." : ""} }`;
-  }
-
-  if (Array.isArray(value)) {
-    const items = value.slice(0, MAX_PREVIEW_ARRAY_ITEMS).map((item) => compactForDisplay(item, depth + 1));
-    if (value.length > MAX_PREVIEW_ARRAY_ITEMS) {
-      items.push(`… (${value.length - MAX_PREVIEW_ARRAY_ITEMS} more items)`);
-    }
-    return items;
-  }
-
-  const entries = Object.entries(value);
-  const compacted = {};
-
-  for (const [key, entryValue] of entries.slice(0, MAX_PREVIEW_OBJECT_KEYS)) {
-    compacted[key] = compactForDisplay(entryValue, depth + 1);
-  }
-
-  if (entries.length > MAX_PREVIEW_OBJECT_KEYS) {
-    compacted["…"] = `${entries.length - MAX_PREVIEW_OBJECT_KEYS} more keys`;
-  }
-
-  return compacted;
 }
 
 setView(selectedView);
