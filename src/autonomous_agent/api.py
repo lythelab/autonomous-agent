@@ -46,12 +46,47 @@ class EnvResponse(BaseModel):
     e2b_template: str | None = Field(default=None, description="Configured E2B template")
 
 
+def _summarize_recent_episodes(full_episodes: list[dict[str, Any]]) -> str | None:
+    if not full_episodes:
+        return None
+
+    recent_episodes = full_episodes[:3]
+    recent_steps = []
+    latest_status = None
+
+    for episode in recent_episodes:
+        episode_value = episode.get("value") if isinstance(episode, dict) else None
+        if not isinstance(episode_value, dict):
+            continue
+
+        step = episode_value.get("step")
+        if isinstance(step, str) and step.strip():
+            recent_steps.append(step.strip())
+
+        if latest_status is None:
+            latest_status = episode_value.get("status")
+
+        if latest_status is None:
+            result_value = episode_value.get("result")
+            if isinstance(result_value, dict):
+                latest_status = result_value.get("status")
+
+    parts = [f"{len(full_episodes)} stored episode(s)"]
+    if recent_steps:
+        parts.append(f"recent steps: {', '.join(recent_steps)}")
+    if isinstance(latest_status, str) and latest_status.strip():
+        parts.append(f"latest status: {latest_status.strip()}")
+
+    return "; ".join(parts)
+
+
 def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
     full_episodes = list(reversed(_agent.memory.get_full_episodes()))
     safe_limit = max(1, min(limit, 100))
     tool_executor = getattr(_agent, "tool_executor", None)
+    summary = _agent.memory.get_summary() or _summarize_recent_episodes(full_episodes)
     return {
-        "summary": _agent.memory.get_summary(),
+        "summary": summary,
         "recent_episodes": full_episodes[:safe_limit],
         "count": len(full_episodes),
         "executor": {

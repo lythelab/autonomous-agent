@@ -307,7 +307,17 @@ function compactForDisplay(value, depth = 0) {
   }
 
   if (depth >= MAX_PREVIEW_DEPTH) {
-    return Array.isArray(value) ? `[${value.length} items]` : "[object]";
+    if (Array.isArray(value)) {
+      return `[${value.length} items]`;
+    }
+
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
+      return "{}";
+    }
+
+    const previewKeys = keys.slice(0, 3);
+    return `{ ${previewKeys.join(", ")}${keys.length > previewKeys.length ? ", ..." : ""} }`;
   }
 
   if (Array.isArray(value)) {
