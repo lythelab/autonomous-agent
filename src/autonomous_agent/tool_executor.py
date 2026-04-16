@@ -202,6 +202,11 @@ class ToolExecutor:
 
         if not normalized_task or normalized_task.lower() in generic_labels:
             if goal:
+                if "ai" in goal.lower() and "release" in goal.lower():
+                    return (
+                        "AI model release notes OpenAI Anthropic Google DeepMind Meta xAI "
+                        "latest updates changelog"
+                    )
                 return f"{goal} latest releases notable changes"
             return "latest ai model releases notable changes"
 
@@ -216,13 +221,13 @@ class ToolExecutor:
             "try:\n"
             "    from duckduckgo_search import DDGS\n"
             "except ModuleNotFoundError:\n"
-            "    import subprocess\n"
-            "    import sys\n"
             "    try:\n"
-            "        subprocess.run([sys.executable, '-m', 'pip', 'install', 'duckduckgo_search', '-q'], check=True)\n"
-            "        from duckduckgo_search import DDGS\n"
-            "    except Exception:\n"
+            "        from ddgs import DDGS\n"
+            "    except ModuleNotFoundError:\n"
             "        DDGS = None\n"
+            "import urllib.parse\n"
+            "import urllib.request\n"
+            "import xml.etree.ElementTree as ET\n"
             f"query = {escaped_query}\n"
             "results = []\n"
             "if DDGS is not None:\n"
@@ -230,6 +235,22 @@ class ToolExecutor:
             "        results = list(DDGS().text(query, max_results=5))\n"
             "    except Exception:\n"
             "        results = []\n"
+            "if not results:\n"
+            "    try:\n"
+            "        encoded = urllib.parse.quote_plus(query)\n"
+            "        rss_url = f'https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en'\n"
+            "        with urllib.request.urlopen(rss_url, timeout=10) as response:\n"
+            "            xml_data = response.read()\n"
+            "        root = ET.fromstring(xml_data)\n"
+            "        channel = root.find('channel')\n"
+            "        if channel is not None:\n"
+            "            for item in channel.findall('item')[:5]:\n"
+            "                title = (item.findtext('title') or '').strip()\n"
+            "                link = (item.findtext('link') or '').strip()\n"
+            "                if title and link:\n"
+            "                    results.append({'title': title, 'href': link})\n"
+            "    except Exception:\n"
+            "        results = results\n"
             "if not results:\n"
             "    print('No results found')\n"
             "for item in results:\n"

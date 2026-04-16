@@ -178,7 +178,7 @@ def test_execute_task_underscore_step_uses_goal_query() -> None:
     )
 
     assert result["status"] == "ok"
-    assert any("Monitor AI releases and summarize notable changes" in call for call in sandbox.calls)
+    assert any("AI model release notes OpenAI Anthropic Google DeepMind Meta xAI" in call for call in sandbox.calls)
 
 
 def test_executor_uses_fallback_when_e2b_create_fails(monkeypatch) -> None:
