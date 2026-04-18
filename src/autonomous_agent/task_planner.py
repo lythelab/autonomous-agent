@@ -38,7 +38,11 @@ class TaskPlanner:
                         "role": "system",
                         "content": (
                             "You are a task planner for a long-running autonomous agent. "
-                            "Return a concise JSON array of executable task strings."
+                            "Return ONLY a JSON array of 3-6 executable task strings. "
+                            "Each task must be directly runnable by this agent and should use one of these prefixes when relevant: "
+                            "search:, fetch:, code:, summarize:. "
+                            "Do not return generic placeholders. "
+                            "The final task should usually be a summarize task that synthesizes findings for the goal."
                         ),
                     },
                     {
@@ -86,7 +90,8 @@ class TaskPlanner:
             f"{goal}\n\n"
             "Memory context (JSON):\n"
             f"{json.dumps(context, sort_keys=True)}\n\n"
-            "Return only JSON array of short executable tasks."
+            "Return only a JSON array of executable tasks. "
+            "Prefer concrete web searches over vague steps."
         )
 
     def _parse_plan(self, content: str) -> list[str]:
@@ -109,14 +114,50 @@ class TaskPlanner:
         return steps
 
     def _heuristic_plan(self, goal: str) -> list[str]:
-        chunks = [part.strip(" .") for part in re.split(r"[.;]|\band\b", goal, flags=re.IGNORECASE)]
+        normalized_goal = " ".join(goal.split()).strip()
+        if not normalized_goal:
+            return [
+                "search: latest AI and technology updates",
+                "summarize: Summarize the key findings and recommended next actions",
+            ]
+
+        lowered = normalized_goal.lower()
+        research_markers = (
+            "search",
+            "research",
+            "latest",
+            "trend",
+            "news",
+            "find",
+            "analyze",
+            "report",
+            "summary",
+            "summarize",
+            "startup",
+            "yc",
+            "conversational",
+            "ai",
+        )
+        is_research_goal = any(marker in lowered for marker in research_markers)
+
+        if is_research_goal:
+            return [
+                f"search: {normalized_goal}",
+                f"search: {normalized_goal} site:ycombinator.com OR site:techcrunch.com OR site:venturebeat.com",
+                f"summarize: Synthesize the most important findings for goal: {normalized_goal}",
+            ]
+
+        chunks = [part.strip(" .") for part in re.split(r"[.;]|\band\b", normalized_goal, flags=re.IGNORECASE)]
         chunks = [part for part in chunks if part]
 
         if chunks:
-            return [f"code: print({json.dumps(part)})" for part in chunks[:8]]
+            steps: list[str] = [f"search: {chunks[0]}"]
+            if len(chunks) > 1:
+                steps.extend(f"search: {part}" for part in chunks[1:3])
+            steps.append(f"summarize: Provide a concise result for goal: {normalized_goal}")
+            return steps
 
         return [
-            "code: print('Clarify goal requirements')",
-            "code: print('Execute primary objective')",
-            "code: print('Summarize outcome and next actions')",
+            f"search: {normalized_goal}",
+            f"summarize: Provide a concise result for goal: {normalized_goal}",
         ]

@@ -233,6 +233,24 @@ def test_execute_task_make_report_routes_to_summarize() -> None:
     assert any("Summary:" in call for call in sandbox.calls)
 
 
+def test_execute_task_unknown_text_with_goal_uses_summary_fallback() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "organize_next_actions",
+        state={
+            "goal": "search for latest conversational AI trends at YC startups",
+            "completed_steps": ["search: initial query"],
+            "last_result": {"output": "[report]\nSearch query: conversational AI YC startups"},
+        },
+    )
+
+    assert result["status"] == "ok"
+    assert any("Goal: search for latest conversational AI trends at YC startups" in call for call in sandbox.calls)
+    assert any("Summary:" in call for call in sandbox.calls)
+
+
 def test_run_code_parses_wrapped_logs_output() -> None:
     executor = ToolExecutor(sandbox=WrappedLogsSandbox())
 

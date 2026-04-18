@@ -151,10 +151,15 @@ class ToolExecutor:
             result = self.web_search(query)
             return self._attach_tool_call(result, "web_search", query)
 
-        # Fallback keeps arbitrary natural-language steps executable.
-        safe_payload = json.dumps(normalized)
-        result = self.run_code(f"print('TASK:', {safe_payload})")
-        return self._attach_tool_call(result, "run_code", normalized)
+        # Fallback keeps arbitrary natural-language steps executable while
+        # still returning useful output instead of echoing the task text.
+        if state and state.get("goal"):
+            result = self._summarize_progress(task=normalized, state=state)
+            return self._attach_tool_call(result, "summarize_progress", normalized)
+
+        query = self._build_research_query(normalized, state)
+        result = self.web_search(query)
+        return self._attach_tool_call(result, "web_search", query)
 
     def _summarize_progress(self, task: str, state: dict[str, Any] | None) -> dict[str, Any]:
         if state is None:

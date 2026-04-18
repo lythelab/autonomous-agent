@@ -33,8 +33,8 @@ const statFailures = document.getElementById("statFailures");
 const statCompleted = document.getElementById("statCompleted");
 const statRemaining = document.getElementById("statRemaining");
 
-const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
-
+// const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
+const BACKEND_API_URL = "http://localhost:8000";
 
 
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
