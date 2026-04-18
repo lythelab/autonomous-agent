@@ -45,6 +45,31 @@ class FakeMemory:
     def get_summary(self) -> str:
         return "summary text"
 
+    def get_context_pack(self, query: str | None = None, top_k: int = 5) -> dict[str, Any]:
+        return {
+            "summary": "summary text",
+            "recent_episodes": [
+                {
+                    "key": "episode_2",
+                    "value": {
+                        "result": {
+                            "output": "[report]\nTop finding: AI agents are being deployed in enterprise workflows.",
+                        }
+                    },
+                }
+            ],
+            "matches": [
+                {
+                    "key": "episode_1",
+                    "value": {
+                        "result": {
+                            "output": "[report]\nTop finding: Retrieval-augmented generation adoption is increasing.",
+                        }
+                    },
+                }
+            ],
+        }
+
 
 class FakeMemoryWithoutSummary(FakeMemory):
     def get_summary(self) -> str | None:
@@ -83,3 +108,28 @@ def test_env_endpoint_returns_backend_url(monkeypatch) -> None:
     payload = api.get_env()
 
     assert payload.backend_api_url == "http://localhost:8000"
+
+
+def test_chat_endpoint_returns_answer_from_memory(monkeypatch) -> None:
+    monkeypatch.setattr(api, "_agent", FakeAgent())
+
+    payload = api.chat(api.ChatRequest(question="What trends were found?", top_k=5))
+
+    assert payload["status"] == "ok"
+    assert "Question: What trends were found?" in payload["answer"]
+    assert len(payload["sources"]) >= 1
+
+
+def test_chat_endpoint_handles_empty_context(monkeypatch) -> None:
+    class EmptyMemory(FakeMemory):
+        def get_context_pack(self, query: str | None = None, top_k: int = 5) -> dict[str, Any]:
+            return {"summary": None, "recent_episodes": [], "matches": []}
+
+    agent = FakeAgent()
+    agent.memory = EmptyMemory()
+    monkeypatch.setattr(api, "_agent", agent)
+
+    payload = api.chat(api.ChatRequest(question="Any findings?", top_k=5))
+
+    assert payload["status"] == "ok"
+    assert "could not find relevant prior findings" in payload["answer"].lower()

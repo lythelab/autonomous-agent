@@ -124,14 +124,28 @@
         </div>
       </section>
 
+      <section class="panel chat-panel">
+        <div class="panel-header">
+          <h2>6. Ask Findings</h2>
+          <span id="chatBadge" class="badge idle">idle</span>
+        </div>
+        <label for="chatQuestion">Question about searched results</label>
+        <textarea id="chatQuestion" rows="2" placeholder="What were the top AI trends found?"></textarea>
+        <div class="button-row two tight">
+          <button id="askChat" class="primary">Ask</button>
+          <button id="clearChat">Clear</button>
+        </div>
+        <pre id="chatAnswer" class="viewer wrap chat-answer">Ask a question to get an answer from stored findings.</pre>
+      </section>
+
       <section class="panel data-panel">
         <div class="panel-header">
-          <h2 id="outputTitle">6. Current State</h2>
+          <h2 id="outputTitle">7. Current State</h2>
         </div>
         <pre id="stateOutput" class="viewer wrap">Loading...</pre>
       </section>
     </main>
 
-    <script src="./app.js?v=20260418-6" defer></script>
+    <script src="./app.js?v=20260418-7" defer></script>
   </body>
 </html>

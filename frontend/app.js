@@ -9,6 +9,9 @@ const viewBadge = document.getElementById("viewBadge");
 const backendBadge = document.getElementById("backendBadge");
 const toolsBadge = document.getElementById("toolsBadge");
 const toolsUsed = document.getElementById("toolsUsed");
+const chatBadge = document.getElementById("chatBadge");
+const chatQuestion = document.getElementById("chatQuestion");
+const chatAnswer = document.getElementById("chatAnswer");
 
 const setGoalButton = document.getElementById("setGoal");
 const runCycleButton = document.getElementById("runCycle");
@@ -20,6 +23,8 @@ const showLogsButton = document.getElementById("showLogs");
 const showBothButton = document.getElementById("showBoth");
 const checkHealthButton = document.getElementById("checkHealth");
 const reloadConfigButton = document.getElementById("reloadConfig");
+const askChatButton = document.getElementById("askChat");
+const clearChatButton = document.getElementById("clearChat");
 const wrapToggle = document.getElementById("wrapToggle");
 const copyVisibleButton = document.getElementById("copyVisible");
 const downloadVisibleButton = document.getElementById("downloadVisible");
@@ -64,6 +69,14 @@ runFiveButton.addEventListener("click", async () => {
 });
 
 refreshButton.addEventListener("click", refreshView);
+
+if (askChatButton) {
+  askChatButton.addEventListener("click", askChat);
+}
+
+if (clearChatButton) {
+  clearChatButton.addEventListener("click", clearChat);
+}
 
 resetButton.addEventListener("click", async () => {
   await post("/reset", {});
@@ -203,6 +216,60 @@ async function post(path, payload) {
   }
 
   return response.json();
+}
+
+async function askChat() {
+  const question = (chatQuestion?.value || "").trim();
+  if (!question) {
+    if (chatAnswer) {
+      chatAnswer.textContent = "Please enter a question first.";
+    }
+    if (chatBadge) {
+      chatBadge.textContent = "idle";
+      chatBadge.className = "badge idle";
+    }
+    return;
+  }
+
+  if (chatBadge) {
+    chatBadge.textContent = "asking";
+    chatBadge.className = "badge running";
+  }
+
+  const payload = await post("/chat", { question, top_k: 6 });
+  if (!payload) {
+    if (chatAnswer) {
+      chatAnswer.textContent = "Chat request failed.";
+    }
+    if (chatBadge) {
+      chatBadge.textContent = "error";
+      chatBadge.className = "badge failed";
+    }
+    return;
+  }
+
+  if (chatAnswer) {
+    chatAnswer.textContent = normalizeTextBlock(payload.answer || "No answer available.");
+  }
+
+  if (chatBadge) {
+    const sourcesCount = Array.isArray(payload.sources) ? payload.sources.length : 0;
+    chatBadge.textContent = sourcesCount ? `sources ${sourcesCount}` : "ready";
+    chatBadge.className = "badge completed";
+  }
+}
+
+function clearChat() {
+  if (chatQuestion) {
+    chatQuestion.value = "";
+  }
+  if (chatAnswer) {
+    chatAnswer.textContent = "Ask a question to get an answer from stored findings.";
+  }
+  if (chatBadge) {
+    chatBadge.textContent = "idle";
+    chatBadge.className = "badge idle";
+  }
 }
 
 function setBackendStatus() {

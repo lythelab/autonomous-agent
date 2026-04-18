@@ -42,10 +42,83 @@ class RunRequest(BaseModel):
     max_cycles: int = Field(default=1, ge=1, le=10_000)
 
 
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=1, description="Question about the agent's findings")
+    top_k: int = Field(default=6, ge=1, le=20, description="How many memory items to inspect")
+
+
 class EnvResponse(BaseModel):
     backend_api_url: str = Field(default="", description="Backend API base URL configured via environment")
     e2b_enabled: bool = Field(default=False, description="Whether E2B API key is configured")
     e2b_template: str | None = Field(default=None, description="Configured E2B template")
+
+
+def _strip_report_header(text: str) -> str:
+    cleaned = text.strip()
+    while cleaned.lower().startswith("[report]"):
+        cleaned = cleaned[len("[report]"):].lstrip()
+    return cleaned
+
+
+def _extract_chat_snippets(context: dict[str, Any], limit: int = 5) -> list[str]:
+    snippets: list[str] = []
+    seen: set[str] = set()
+
+    def add_snippet(value: str) -> None:
+        normalized = _strip_report_header(value).strip()
+        if not normalized:
+            return
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        snippets.append(normalized)
+
+    for record in context.get("matches", []):
+        if not isinstance(record, dict):
+            continue
+        payload = record.get("value")
+        if not isinstance(payload, dict):
+            continue
+
+        result = payload.get("result")
+        if isinstance(result, dict):
+            output = result.get("output")
+            if isinstance(output, str):
+                add_snippet(output)
+
+    for episode in context.get("recent_episodes", []):
+        if not isinstance(episode, dict):
+            continue
+        value = episode.get("value")
+        if not isinstance(value, dict):
+            continue
+        result = value.get("result")
+        if isinstance(result, dict):
+            output = result.get("output")
+            if isinstance(output, str):
+                add_snippet(output)
+
+    return snippets[:limit]
+
+
+def _build_chat_answer(question: str, snippets: list[str]) -> str:
+    if not snippets:
+        return (
+            "I could not find relevant prior findings for that question yet. "
+            "Run more cycles or ask about a topic the agent has already searched."
+        )
+
+    lines = [
+        f"Question: {question.strip()}",
+        "Answer based on stored findings:",
+    ]
+    for snippet in snippets:
+        snippet_lines = [line.strip() for line in snippet.splitlines() if line.strip()]
+        first_line = snippet_lines[0] if snippet_lines else snippet
+        lines.append(f"- {first_line[:280]}")
+
+    lines.append("Use these findings as context for your next goal or follow-up question.")
+    return "\n".join(lines)
 
 
 def _summarize_recent_episodes(full_episodes: list[dict[str, Any]]) -> str | None:
@@ -196,6 +269,22 @@ def run(payload: RunRequest) -> dict[str, Any]:
     with _lock:
         state = _agent.run(max_cycles=payload.max_cycles)
     return {"status": "ok", "state": state}
+
+
+@app.post("/chat")
+def chat(payload: ChatRequest) -> dict[str, Any]:
+    question = payload.question.strip()
+    with _lock:
+        context = _agent.memory.get_context_pack(query=question, top_k=payload.top_k)
+
+    snippets = _extract_chat_snippets(context, limit=5)
+    answer = _build_chat_answer(question, snippets)
+    return {
+        "status": "ok",
+        "question": question,
+        "answer": answer,
+        "sources": snippets,
+    }
 
 
 @app.post("/reset")

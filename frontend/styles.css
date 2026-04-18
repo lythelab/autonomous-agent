@@ -107,6 +107,10 @@ body {
   margin-top: 2px;
 }
 
+.chat-panel {
+  margin-top: 2px;
+}
+
 .top-row {
   display: grid;
   grid-template-columns: 1.25fr 0.95fr;
@@ -289,6 +293,11 @@ button.danger {
 
 .data-panel .viewer {
   min-height: min(34vh, 420px);
+}
+
+.chat-answer {
+  min-height: 130px;
+  margin-top: 8px;
 }
 
 .tools-list {
