@@ -47,6 +47,14 @@ class MissingSandboxErrorSandbox:
         )
 
 
+class WrappedLogsSandbox:
+    def run_code(self, code: str) -> Any:
+        return SimpleNamespace(
+            logs='Logs(stdout: ["Goal: search AI trends and summarize a report\\nCompleted steps:\\n  - search_ai_trends\\nLatest findings:\\nLogs(stdout: [\'TASK: search_ai_trends\\\\n\'], stderr: [])\\nSummary: Focus notable release updates and report actionable changes.\\n"], stderr: [])',
+            error=None,
+        )
+
+
 def test_run_code_returns_output() -> None:
     executor = ToolExecutor(sandbox=FakeSandbox())
 
@@ -179,6 +187,30 @@ def test_execute_task_underscore_step_uses_goal_query() -> None:
 
     assert result["status"] == "ok"
     assert any("AI model release notes OpenAI Anthropic Google DeepMind Meta xAI" in call for call in sandbox.calls)
+
+
+def test_execute_task_search_ai_trends_routes_to_web_search() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "search_ai_trends",
+        state={"goal": "search for latest AI trends and make a report"},
+    )
+
+    assert result["status"] == "ok"
+    assert any("DDGS" in call for call in sandbox.calls)
+
+
+def test_run_code_parses_wrapped_logs_output() -> None:
+    executor = ToolExecutor(sandbox=WrappedLogsSandbox())
+
+    result = executor.run_code("print('ignored')")
+
+    assert result["status"] == "ok"
+    assert "Logs(stdout:" not in result["output"]
+    assert result["output"].startswith("[report]\nGoal: search AI trends")
+    assert "TASK: search_ai_trends" in result["output"]
 
 
 def test_executor_uses_fallback_when_e2b_create_fails(monkeypatch) -> None:

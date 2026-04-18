@@ -26,7 +26,9 @@ const statFailures = document.getElementById("statFailures");
 const statCompleted = document.getElementById("statCompleted");
 const statRemaining = document.getElementById("statRemaining");
 
-const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
+// const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
+const BACKEND_API_URL = "http://localhost:8000";
+
 
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
@@ -212,7 +214,7 @@ function setBackendStatus() {
   backendBadge.textContent = "error";
   backendBadge.className = "badge failed";
   apiHint.textContent = "Backend URL is not configured. Set BACKEND_API_URL in frontend/app.js.";
-  output.textContent = "[report]\nBACKEND_API_URL is empty";
+  output.textContent = "BACKEND_API_URL is empty";
 }
 
 async function checkBackendHealth() {
@@ -301,12 +303,20 @@ function renderStats(state) {
 }
 
 function extractLatestOutput(state, view) {
+  const latestBody = extractLatestOutputBody(state, view);
+  return formatLatestReport(latestBody);
+}
+
+function extractLatestOutputBody(state, view) {
   if (!state) {
     return "";
   }
 
   if (view === "both") {
-    return extractLatestOutput(state.state || state, "state") || extractLatestOutput({ logsText: state.logsText || "" }, "logs");
+    return (
+      extractLatestOutputBody(state.state || state, "state")
+      || extractLatestOutputBody({ logsText: state.logsText || "" }, "logs")
+    );
   }
 
   if (typeof state.last_output === "string" && state.last_output.trim()) {
@@ -324,10 +334,10 @@ function extractLatestOutput(state, view) {
       const line = lines[i];
       const match = line.match(/Tool called: ([^\s]+)/);
       if (match) {
-        return formatReportText(`Last tool call: ${match[1]}`);
+        return `Last tool call: ${match[1]}`;
       }
     }
-    return formatReportText(logsText || "No logs yet.");
+    return logsText || "No logs yet.";
   }
 
   return "";
@@ -335,18 +345,18 @@ function extractLatestOutput(state, view) {
 
 function formatMainOutput(state, view) {
   if (view === "logs") {
-    const logsText = typeof state.logsText === "string" ? state.logsText.trim() : "";
-    return formatReportText(logsText || "No logs available yet.");
+    const logsText = typeof state.logsText === "string" ? normalizeTextBlock(state.logsText) : "";
+    return logsText || "No logs available yet.";
   }
 
   if (view === "both") {
     const stateText = formatStateText(state.state || {});
-    const logsText = typeof state.logsText === "string" ? state.logsText.trim() : "";
+    const logsText = typeof state.logsText === "string" ? normalizeTextBlock(state.logsText) : "";
     const combined = `${stateText}\n\n[logs]\n${logsText || "No logs available yet."}`;
-    return formatReportText(combined);
+    return combined;
   }
 
-  return formatReportText(formatStateText(state));
+  return formatStateText(state);
 }
 
 function formatStateText(state) {
@@ -360,7 +370,7 @@ function formatStateText(state) {
   const failures = state.failure_count ?? 0;
   const completed = countItems(state.completed_steps);
   const remaining = countItems(state.remaining_steps);
-  const lastOutput = extractLatestOutput(state, "state") || "No output available yet.";
+  const lastOutput = normalizeTextBlock(extractLatestOutputBody(state, "state")) || "No output available yet.";
 
   return [
     `Goal: ${goal}`,
@@ -375,15 +385,43 @@ function formatStateText(state) {
   ].join("\n");
 }
 
-function formatReportText(text) {
-  const cleaned = String(text || "").trim();
+function formatLatestReport(text) {
+  const cleaned = normalizeTextBlock(text);
   if (!cleaned) {
     return "[report]\nNo output available yet.";
   }
-  if (cleaned.startsWith("[report]\n")) {
-    return cleaned;
-  }
   return `[report]\n${cleaned}`;
+}
+
+function normalizeTextBlock(value) {
+  let text = String(value ?? "").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (text.startsWith('"') && text.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "string") {
+        text = parsed;
+      }
+    } catch {
+      // Keep original text when it is not a JSON string literal.
+    }
+  }
+
+  text = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\\r/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .trim();
+
+  while (/^\[report\]\s*/i.test(text)) {
+    text = text.replace(/^\[report\]\s*/i, "").trimStart();
+  }
+
+  return text.trim();
 }
 
 function countItems(value) {
@@ -402,7 +440,7 @@ setView(selectedView);
 setBackendStatus();
 
 refreshView().catch((error) => {
-  output.textContent = `[report]\n${error.message}`;
+  output.textContent = `Backend request failed: ${error.message}`;
   apiHint.textContent = `Backend request failed: ${error.message}`;
   backendBadge.textContent = "error";
   backendBadge.className = "badge failed";

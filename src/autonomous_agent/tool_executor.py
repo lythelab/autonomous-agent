@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import ast
 import json
 import logging
 import time
@@ -159,6 +160,7 @@ class ToolExecutor:
         goal = state.get("goal") or ""
         completed = state.get("completed_steps", [])
         last_output = (state.get("last_result") or {}).get("output") or ""
+        cleaned_last_output = self._clean_output_text(str(last_output))
         
         summary_lines = [
             f"Goal: {goal}"
@@ -169,12 +171,19 @@ class ToolExecutor:
             for step in completed:
                 summary_lines.append(f"  - {step}")
         
-        if last_output:
+        if cleaned_last_output:
             summary_lines.append("Latest findings:")
-            truncated = last_output[:500] if len(last_output) > 500 else last_output
+            truncated = (
+                cleaned_last_output[:500]
+                if len(cleaned_last_output) > 500
+                else cleaned_last_output
+            )
             summary_lines.append(truncated)
-        
-        summary_lines.append("Summary: Focus notable release updates and report actionable changes.")
+
+        if goal:
+            summary_lines.append(f"Summary: Provide a concise report aligned to the goal: {goal}")
+        else:
+            summary_lines.append("Summary: Provide a concise report based on the findings above.")
         
         output = "\n".join(summary_lines)
         safe_payload = json.dumps(output)
@@ -183,16 +192,21 @@ class ToolExecutor:
     def _looks_like_research_task(self, task: str) -> bool:
         lowered = task.lower()
         keywords = (
+            "search",
             "check",
             "monitor",
             "research",
             "identify",
             "find",
+            "trend",
             "release",
             "news",
             "latest",
             "changes",
             "update",
+            "report",
+            "summarize",
+            "analysis",
         )
         return any(token in lowered for token in keywords)
 
@@ -203,6 +217,9 @@ class ToolExecutor:
         goal = (state or {}).get("goal") if state else None
 
         generic_labels = {
+            "search ai trends",
+            "search for ai trends",
+            "research ai trends",
             "check ai releases",
             "monitor ai releases",
             "identify notable changes",
@@ -394,8 +411,41 @@ class ToolExecutor:
     def _extract_logs(self, result: Any) -> str:
         logs = getattr(result, "logs", "")
         if isinstance(logs, list):
-            return "\n".join(str(item) for item in logs)
-        return str(logs)
+            extracted_lines: list[str] = []
+            for item in logs:
+                stdout_text = self._extract_stdout(item)
+                if stdout_text:
+                    extracted_lines.append(stdout_text)
+                else:
+                    extracted_lines.append(str(item))
+            raw_text = "\n".join(line for line in extracted_lines if line).strip()
+            return self._clean_output_text(raw_text)
+
+        direct_stdout = self._extract_stdout(logs)
+        if direct_stdout:
+            return self._clean_output_text(direct_stdout)
+
+        return self._clean_output_text(str(logs))
+
+    def _extract_stdout(self, log_item: Any) -> str:
+        # E2B log records can be object-like or dict-like with stdout/stderr fields.
+        if isinstance(log_item, dict):
+            stdout_value = log_item.get("stdout")
+            if stdout_value is None:
+                return ""
+            return self._normalize_stream(stdout_value)
+
+        stdout_value = getattr(log_item, "stdout", None)
+        if stdout_value is None:
+            return ""
+        return self._normalize_stream(stdout_value)
+
+    def _normalize_stream(self, value: Any) -> str:
+        if isinstance(value, list):
+            parts = [self._clean_output_text(str(item)) for item in value if str(item).strip()]
+            return "\n".join(part for part in parts if part).strip()
+
+        return self._clean_output_text(str(value))
 
     def _tool_call_payload(self, tool_name: str, tool_input: str) -> dict[str, str]:
         return {
@@ -412,9 +462,73 @@ class ToolExecutor:
         return result
 
     def _format_report_output(self, text: str) -> str:
-        cleaned = text.strip()
+        cleaned = self._clean_output_text(text)
         if not cleaned:
             cleaned = "No output available."
-        if cleaned.startswith("[report]\n"):
-            return cleaned
         return f"[report]\n{cleaned}"
+
+    def _strip_report_header(self, text: str) -> str:
+        cleaned = text.strip()
+        while cleaned.lower().startswith("[report]"):
+            cleaned = cleaned[len("[report]"):].lstrip()
+        return cleaned
+
+    def _clean_output_text(self, text: str) -> str:
+        cleaned = self._strip_report_header(text)
+
+        previous = None
+        while cleaned and cleaned != previous:
+            previous = cleaned
+            extracted = self._try_extract_stdout_from_logs_repr(cleaned)
+            if extracted is None:
+                break
+            cleaned = self._strip_report_header(extracted)
+
+        cleaned = self._unwrap_embedded_logs_lines(cleaned)
+
+        return cleaned.strip()
+
+    def _unwrap_embedded_logs_lines(self, text: str) -> str:
+        lines = text.splitlines()
+        changed = False
+        normalized_lines: list[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            extracted = self._try_extract_stdout_from_logs_repr(stripped)
+            if extracted is None:
+                normalized_lines.append(line)
+                continue
+
+            changed = True
+            if extracted:
+                normalized_lines.extend(extracted.splitlines())
+
+        rebuilt = "\n".join(normalized_lines).strip()
+        if changed:
+            # One more pass handles nested wrappers introduced after line replacement.
+            return self._clean_output_text(rebuilt)
+
+        return rebuilt
+
+    def _try_extract_stdout_from_logs_repr(self, text: str) -> str | None:
+        raw = text.strip()
+        prefix = "Logs(stdout:"
+        if not raw.startswith(prefix):
+            return None
+
+        stderr_marker = ", stderr:"
+        marker_index = raw.rfind(stderr_marker)
+        if marker_index == -1 or not raw.endswith(")"):
+            return None
+
+        stdout_expr = raw[len(prefix):marker_index].strip()
+        if not stdout_expr:
+            return ""
+
+        try:
+            parsed = ast.literal_eval(stdout_expr)
+        except (ValueError, SyntaxError):
+            return stdout_expr
+
+        return self._normalize_stream(parsed)
