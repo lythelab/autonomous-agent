@@ -55,10 +55,9 @@ body {
 }
 
 .layout {
-  width: min(1280px, 94vw);
-  margin: clamp(14px, 2.6vw, 28px) auto;
+  width: min(1200px, 94vw);
+  margin: clamp(14px, 2.6vw, 24px) auto;
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
   gap: 12px;
   animation: reveal 500ms ease-out both;
 }
@@ -73,7 +72,6 @@ body {
 }
 
 .hero {
-  grid-column: 1 / -1;
   background: linear-gradient(120deg, rgba(255, 138, 61, 0.24), rgba(19, 38, 66, 0.7));
 }
 
@@ -98,27 +96,31 @@ body {
 }
 
 .control-panel {
-  grid-column: 1;
+  min-height: 100%;
 }
 
 .stats-panel {
-  grid-column: 2;
-}
-
-.view-panel {
-  grid-column: 1;
-}
-
-.latest-panel {
-  grid-column: 2;
+  min-height: 100%;
 }
 
 .tools-panel {
-  grid-column: 1 / -1;
+  margin-top: 2px;
 }
 
-.data-panel {
-  grid-column: 1 / -1;
+.top-row {
+  display: grid;
+  grid-template-columns: 1.25fr 0.95fr;
+  gap: 12px;
+}
+
+.side-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.outputs-row {
+  display: grid;
+  gap: 12px;
 }
 
 .panel-header {
@@ -132,7 +134,7 @@ body {
 
 .panel-header h2 {
   margin: 0;
-  font: 700 clamp(1.05rem, 2.4vw, 1.25rem) "Archivo", sans-serif;
+  font: 700 clamp(1rem, 2.2vw, 1.15rem) "Archivo", sans-serif;
 }
 
 label {
@@ -238,7 +240,7 @@ button.danger {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .view-button.active {
@@ -274,7 +276,7 @@ button.danger {
   font: 400 0.86rem/1.46 "IBM Plex Mono", monospace;
   overflow: auto;
   max-width: 100%;
-  max-height: min(48vh, 560px);
+  max-height: min(44vh, 520px);
   padding: 12px;
   white-space: pre;
 }
@@ -286,13 +288,13 @@ button.danger {
 }
 
 .data-panel .viewer {
-  min-height: min(36vh, 460px);
+  min-height: min(34vh, 420px);
 }
 
 .tools-list {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .tool-item {
@@ -358,21 +360,12 @@ button.danger {
 }
 
 @media (max-width: 1080px) {
-  .layout {
+  .top-row {
     grid-template-columns: 1fr;
-  }
-
-  .control-panel,
-  .stats-panel,
-  .view-panel,
-  .latest-panel,
-  .tools-panel,
-  .data-panel {
-    grid-column: 1;
   }
 
   .tools-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -386,5 +379,9 @@ button.danger {
 
   .viewer {
     max-height: min(44vh, 500px);
+  }
+
+  .tools-list {
+    grid-template-columns: 1fr;
   }
 }
