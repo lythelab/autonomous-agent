@@ -83,11 +83,11 @@ class ToolExecutor:
                         "status": "failed",
                         "error_type": "tool_error",
                         "error": str(result_error),
-                        "output": self._extract_logs(result),
+                        "output": self._format_report_output(self._extract_logs(result)),
                     }
                 return {
                     "status": "ok",
-                    "output": self._extract_logs(result),
+                    "output": self._format_report_output(self._extract_logs(result)),
                     "error": None,
                 }
             except Exception as exc:  # noqa: BLE001 - classification relies on runtime exception type
@@ -123,24 +123,34 @@ class ToolExecutor:
         if lower in {"update_goal_state", "update goal state"}:
             return {
                 "status": "ok",
-                "output": "Goal state updated.",
+                "output": self._format_report_output("Goal state updated."),
                 "error": None,
+                "tool_calls": [self._tool_call_payload("state_update", task)],
             }
         if lower.startswith("search:"):
-            return self.web_search(normalized.split(":", 1)[1].strip())
+            query = normalized.split(":", 1)[1].strip()
+            result = self.web_search(query)
+            return self._attach_tool_call(result, "web_search", query)
         if lower.startswith("fetch:"):
-            return self.web_fetch(normalized.split(":", 1)[1].strip())
+            url = normalized.split(":", 1)[1].strip()
+            result = self.web_fetch(url)
+            return self._attach_tool_call(result, "web_fetch", url)
         if lower.startswith("code:"):
-            return self.run_code(normalized.split(":", 1)[1].strip())
+            code = normalized.split(":", 1)[1].strip()
+            result = self.run_code(code)
+            return self._attach_tool_call(result, "run_code", code)
         if lower.startswith("summarize") or lower.startswith("summary"):
-            return self._summarize_progress(task=normalized, state=state)
+            result = self._summarize_progress(task=normalized, state=state)
+            return self._attach_tool_call(result, "summarize_progress", normalized)
         if self._looks_like_research_task(normalized):
             query = self._build_research_query(normalized, state)
-            return self.web_search(query)
+            result = self.web_search(query)
+            return self._attach_tool_call(result, "web_search", query)
 
         # Fallback keeps arbitrary natural-language steps executable.
         safe_payload = json.dumps(normalized)
-        return self.run_code(f"print('TASK:', {safe_payload})")
+        result = self.run_code(f"print('TASK:', {safe_payload})")
+        return self._attach_tool_call(result, "run_code", normalized)
 
     def _summarize_progress(self, task: str, state: dict[str, Any] | None) -> dict[str, Any]:
         if state is None:
@@ -273,7 +283,7 @@ class ToolExecutor:
                 content = response.read(2000).decode("utf-8", errors="ignore")
                 return {
                     "status": "ok",
-                    "output": content,
+                    "output": self._format_report_output(content),
                     "error": None,
                 }
         except Exception as exc:
@@ -386,3 +396,25 @@ class ToolExecutor:
         if isinstance(logs, list):
             return "\n".join(str(item) for item in logs)
         return str(logs)
+
+    def _tool_call_payload(self, tool_name: str, tool_input: str) -> dict[str, str]:
+        return {
+            "tool": tool_name,
+            "input": tool_input,
+        }
+
+    def _attach_tool_call(self, result: dict[str, Any], tool_name: str, tool_input: str) -> dict[str, Any]:
+        calls = result.get("tool_calls", [])
+        if not isinstance(calls, list):
+            calls = []
+        calls.append(self._tool_call_payload(tool_name, tool_input))
+        result["tool_calls"] = calls
+        return result
+
+    def _format_report_output(self, text: str) -> str:
+        cleaned = text.strip()
+        if not cleaned:
+            cleaned = "No output available."
+        if cleaned.startswith("[report]\n"):
+            return cleaned
+        return f"[report]\n{cleaned}"

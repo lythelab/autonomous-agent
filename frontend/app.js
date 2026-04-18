@@ -31,7 +31,7 @@ const BACKEND_API_URL = isVercelDeployment() ? "/api" : "http://13.206.89.38";
 const backendApiUrl = normalizeBaseUrl(BACKEND_API_URL);
 
 let selectedView = "state";
-let currentRenderedPayload = null;
+let currentRenderedText = "";
 
 checkHealthButton.addEventListener("click", checkBackendHealth);
 
@@ -88,38 +88,36 @@ wrapToggle.addEventListener("change", () => {
 });
 
 copyVisibleButton.addEventListener("click", async () => {
-  const payload = currentRenderedPayload;
-  if (!payload) {
+  if (!currentRenderedText.trim()) {
     apiHint.textContent = "Nothing available to copy yet.";
     return;
   }
 
   try {
-    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    apiHint.textContent = "Visible JSON copied to clipboard.";
+    await navigator.clipboard.writeText(currentRenderedText);
+    apiHint.textContent = "Visible text copied to clipboard.";
   } catch (error) {
     apiHint.textContent = `Copy failed: ${error.message}`;
   }
 });
 
 downloadVisibleButton.addEventListener("click", () => {
-  const payload = currentRenderedPayload;
-  if (!payload) {
+  if (!currentRenderedText.trim()) {
     apiHint.textContent = "Nothing available to download yet.";
     return;
   }
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const blob = new Blob([currentRenderedText], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   anchor.href = url;
-  anchor.download = `autonomous-agent-${selectedView}-${timestamp}.json`;
+  anchor.download = `autonomous-agent-${selectedView}-${timestamp}.log`;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
-  apiHint.textContent = "Visible JSON downloaded.";
+  apiHint.textContent = "Visible text downloaded.";
 });
 
 function setView(view) {
@@ -138,14 +136,14 @@ async function refreshView() {
   }
 
   if (selectedView === "logs") {
-    const logs = await get("/logs");
-    renderState(logs, "logs");
+    const logsText = await getText("/logs");
+    renderState({ logsText }, "logs");
     return;
   }
 
   if (selectedView === "both") {
-    const [state, logs] = await Promise.all([get("/state"), get("/logs")]);
-    renderState({ state, logs }, "both");
+    const [state, logsText] = await Promise.all([get("/state"), getText("/logs")]);
+    renderState({ state, logsText }, "both");
     return;
   }
 
@@ -167,6 +165,18 @@ async function get(path) {
     throw new Error(`HTTP ${response.status}`);
   }
   return response.json();
+}
+
+async function getText(path) {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Backend URL is not configured.");
+  }
+  const response = await fetch(`${baseUrl}${path}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.text();
 }
 
 async function post(path, payload) {
@@ -202,7 +212,7 @@ function setBackendStatus() {
   backendBadge.textContent = "error";
   backendBadge.className = "badge failed";
   apiHint.textContent = "Backend URL is not configured. Set BACKEND_API_URL in frontend/app.js.";
-  output.textContent = JSON.stringify({ message: "BACKEND_API_URL is empty" }, null, 2);
+  output.textContent = "[report]\nBACKEND_API_URL is empty";
 }
 
 async function checkBackendHealth() {
@@ -260,8 +270,9 @@ function renderState(state, view = "state") {
     outputBadge.className = `badge ${latestOutputText ? "completed" : "idle"}`;
   }
 
-  currentRenderedPayload = state;
-  output.textContent = JSON.stringify(state, null, 2);
+  const renderedText = formatMainOutput(state, view);
+  currentRenderedText = renderedText;
+  output.textContent = renderedText;
 
   const stateForStats = view === "both" ? state.state || {} : view === "state" ? state : {};
   renderStats(stateForStats);
@@ -270,7 +281,7 @@ function renderState(state, view = "state") {
   let badgeClass = state.status || "idle";
 
   if (view === "logs") {
-    badgeText = `logs ${state.count ?? 0}`;
+    badgeText = `logs ${countItems((state.logsText || "").split("\n").filter(Boolean))}`;
     badgeClass = "completed";
   } else if (view === "both") {
     badgeText = "mixed";
@@ -295,7 +306,7 @@ function extractLatestOutput(state, view) {
   }
 
   if (view === "both") {
-    return extractLatestOutput(state.state || state.logs || state, "state") || extractLatestOutput(state.logs, "logs");
+    return extractLatestOutput(state.state || state, "state") || extractLatestOutput({ logsText: state.logsText || "" }, "logs");
   }
 
   if (typeof state.last_output === "string" && state.last_output.trim()) {
@@ -307,17 +318,72 @@ function extractLatestOutput(state, view) {
   }
 
   if (view === "logs") {
-    const recentEpisodes = Array.isArray(state.recent_episodes) ? state.recent_episodes : [];
-    for (const episode of recentEpisodes) {
-      const episodeValue = episode?.value || {};
-      const candidate = episodeValue?.result?.output || episodeValue?.output || episodeValue?.last_output;
-      if (typeof candidate === "string" && candidate.trim()) {
-        return candidate;
+    const logsText = typeof state.logsText === "string" ? state.logsText : "";
+    const lines = logsText.split("\n").filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const line = lines[i];
+      const match = line.match(/Tool called: ([^\s]+)/);
+      if (match) {
+        return formatReportText(`Last tool call: ${match[1]}`);
       }
     }
+    return formatReportText(logsText || "No logs yet.");
   }
 
   return "";
+}
+
+function formatMainOutput(state, view) {
+  if (view === "logs") {
+    const logsText = typeof state.logsText === "string" ? state.logsText.trim() : "";
+    return formatReportText(logsText || "No logs available yet.");
+  }
+
+  if (view === "both") {
+    const stateText = formatStateText(state.state || {});
+    const logsText = typeof state.logsText === "string" ? state.logsText.trim() : "";
+    const combined = `${stateText}\n\n[logs]\n${logsText || "No logs available yet."}`;
+    return formatReportText(combined);
+  }
+
+  return formatReportText(formatStateText(state));
+}
+
+function formatStateText(state) {
+  if (!state || typeof state !== "object") {
+    return "No state available yet.";
+  }
+
+  const goal = state.goal || "n/a";
+  const status = state.status || "idle";
+  const iterations = state.iterations ?? 0;
+  const failures = state.failure_count ?? 0;
+  const completed = countItems(state.completed_steps);
+  const remaining = countItems(state.remaining_steps);
+  const lastOutput = extractLatestOutput(state, "state") || "No output available yet.";
+
+  return [
+    `Goal: ${goal}`,
+    `Status: ${status}`,
+    `Iterations: ${iterations}`,
+    `Failures: ${failures}`,
+    `Completed: ${completed}`,
+    `Remaining: ${remaining}`,
+    "",
+    "Latest output:",
+    lastOutput,
+  ].join("\n");
+}
+
+function formatReportText(text) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) {
+    return "[report]\nNo output available yet.";
+  }
+  if (cleaned.startsWith("[report]\n")) {
+    return cleaned;
+  }
+  return `[report]\n${cleaned}`;
 }
 
 function countItems(value) {
@@ -336,7 +402,7 @@ setView(selectedView);
 setBackendStatus();
 
 refreshView().catch((error) => {
-  output.textContent = JSON.stringify({ message: error.message }, null, 2);
+  output.textContent = `[report]\n${error.message}`;
   apiHint.textContent = `Backend request failed: ${error.message}`;
   backendBadge.textContent = "error";
   backendBadge.className = "badge failed";

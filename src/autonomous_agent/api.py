@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 from threading import Lock
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from .config import get_settings
@@ -80,22 +82,73 @@ def _summarize_recent_episodes(full_episodes: list[dict[str, Any]]) -> str | Non
     return "; ".join(parts)
 
 
-def _build_logs_payload(limit: int = 20) -> dict[str, Any]:
+def _format_log_line(level: str, message: str, timestamp: float | None = None) -> str:
+    if timestamp is None:
+        dt = datetime.now()
+    else:
+        dt = datetime.fromtimestamp(timestamp)
+    stamp = dt.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+    return f"{stamp} {level} [autonomous_agent.agent] {message}"
+
+
+def _extract_tool_calls(episode_value: dict[str, Any]) -> list[dict[str, str]]:
+    result_value = episode_value.get("result")
+    if not isinstance(result_value, dict):
+        return []
+
+    calls = result_value.get("tool_calls", [])
+    if not isinstance(calls, list):
+        return []
+
+    normalized_calls: list[dict[str, str]] = []
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        tool_name = str(call.get("tool", "")).strip()
+        tool_input = str(call.get("input", "")).strip()
+        if not tool_name:
+            continue
+        normalized_calls.append({"tool": tool_name, "input": tool_input})
+    return normalized_calls
+
+
+def _build_logs_text(limit: int = 20) -> str:
     full_episodes = list(reversed(_agent.memory.get_full_episodes()))
     safe_limit = max(1, min(limit, 100))
-    tool_executor = getattr(_agent, "tool_executor", None)
     summary = _agent.memory.get_summary() or _summarize_recent_episodes(full_episodes)
-    return {
-        "summary": summary,
-        "recent_episodes": full_episodes[:safe_limit],
-        "count": len(full_episodes),
-        "executor": {
-            "enabled": tool_executor is not None,
-            "sandbox_provider": getattr(tool_executor, "sandbox_provider", None),
-            "fallback_active": getattr(tool_executor, "fallback_active", None),
-            "last_sandbox_error": getattr(tool_executor, "last_sandbox_error", None),
-        },
-    }
+
+    lines: list[str] = []
+    lines.append(_format_log_line("INFO", f"Loaded {len(full_episodes)} episode(s)"))
+    if summary:
+        lines.append(_format_log_line("INFO", f"Summary: {summary}"))
+
+    for episode in full_episodes[:safe_limit]:
+        if not isinstance(episode, dict):
+            continue
+
+        episode_value = episode.get("value")
+        if not isinstance(episode_value, dict):
+            continue
+
+        step = str(episode_value.get("step", "")).strip() or "unknown_step"
+        status = str(episode_value.get("status", "")).strip() or "unknown"
+        created_at = episode.get("created_at")
+        level = "INFO" if status in {"running", "completed"} else "ERROR"
+        lines.append(_format_log_line(level, f"Step={step} status={status}", timestamp=created_at))
+
+        for tool_call in _extract_tool_calls(episode_value):
+            tool_input = tool_call["input"]
+            if len(tool_input) > 120:
+                tool_input = f"{tool_input[:117]}..."
+            lines.append(
+                _format_log_line(
+                    "INFO",
+                    f"Tool called: {tool_call['tool']} input={tool_input}",
+                    timestamp=created_at,
+                )
+            )
+
+    return "\n".join(lines)
 
 
 @app.get("/health")
@@ -119,10 +172,10 @@ def get_state() -> dict[str, Any]:
         return _agent.load_state()
 
 
-@app.get("/logs")
-def get_logs(limit: int = 20) -> dict[str, Any]:
+@app.get("/logs", response_class=PlainTextResponse)
+def get_logs(limit: int = 20) -> str:
     with _lock:
-        return _build_logs_payload(limit=limit)
+        return _build_logs_text(limit=limit)
 
 
 @app.post("/goal")

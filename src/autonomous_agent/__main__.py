@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 
@@ -47,7 +46,17 @@ def main(argv: list[str] | None = None) -> int:
         db_path=args.db_path,
         runtime_seconds=args.runtime_seconds,
     )
-    print(json.dumps(state, indent=2, sort_keys=True))
+    goal = state.get("goal") if isinstance(state, dict) else None
+    status = state.get("status") if isinstance(state, dict) else None
+    completed = len(state.get("completed_steps", [])) if isinstance(state, dict) else 0
+    remaining = len(state.get("remaining_steps", [])) if isinstance(state, dict) else 0
+    output = (
+        f"Goal: {goal or 'n/a'}\n"
+        f"Status: {status or 'unknown'}\n"
+        f"Completed steps: {completed}\n"
+        f"Remaining steps: {remaining}"
+    )
+    print(f"[report]\\n{output}")
     return 0
 
 

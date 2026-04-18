@@ -12,8 +12,34 @@ from autonomous_agent import api
 class FakeMemory:
     def get_full_episodes(self) -> list[dict[str, Any]]:
         return [
-            {"key": "episode_1", "value": {"step": "search"}, "entry_type": "full"},
-            {"key": "episode_2", "value": {"step": "rank"}, "entry_type": "full"},
+            {
+                "key": "episode_1",
+                "value": {
+                    "step": "search",
+                    "status": "running",
+                    "result": {
+                        "tool_calls": [
+                            {"tool": "web_search", "input": "ai releases"},
+                        ]
+                    },
+                },
+                "entry_type": "full",
+                "created_at": 1.0,
+            },
+            {
+                "key": "episode_2",
+                "value": {
+                    "step": "rank",
+                    "status": "completed",
+                    "result": {
+                        "tool_calls": [
+                            {"tool": "run_code", "input": "print('rank')"},
+                        ]
+                    },
+                },
+                "entry_type": "full",
+                "created_at": 2.0,
+            },
         ]
 
     def get_summary(self) -> str:
@@ -30,15 +56,15 @@ class FakeAgent:
         self.memory = FakeMemory()
 
 
-def test_logs_endpoint_returns_recent_episodes(monkeypatch) -> None:
+def test_logs_endpoint_returns_plain_text_lines(monkeypatch) -> None:
     monkeypatch.setattr(api, "_agent", FakeAgent())
 
     payload = api.get_logs(limit=1)
 
-    assert payload["summary"] == "summary text"
-    assert payload["count"] == 2
-    assert len(payload["recent_episodes"]) == 1
-    assert payload["recent_episodes"][0]["key"] == "episode_2"
+    assert "INFO [autonomous_agent.agent]" in payload
+    assert "Summary: summary text" in payload
+    assert "Step=rank status=completed" in payload
+    assert "Tool called: run_code" in payload
 
 
 def test_logs_endpoint_uses_fallback_summary_when_missing(monkeypatch) -> None:
@@ -48,7 +74,7 @@ def test_logs_endpoint_uses_fallback_summary_when_missing(monkeypatch) -> None:
 
     payload = api.get_logs(limit=2)
 
-    assert payload["summary"] == "2 stored episode(s); recent steps: rank, search"
+    assert "2 stored episode(s); recent steps: rank, search; latest status: completed" in payload
 
 
 def test_env_endpoint_returns_backend_url(monkeypatch) -> None:
