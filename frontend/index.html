@@ -53,31 +53,29 @@
         </section>
 
         <aside class="side-stack">
-          <section class="middle-row">
-            <section class="panel tools-panel">
-              <div class="panel-header">
-                <h2>5. Tools Used</h2>
-                <span id="toolsBadge" class="badge idle">none</span>
-              </div>
-              <div id="toolsUsed" class="tools-list">
-                <p class="hint">No tools called yet.</p>
-              </div>
-            </section>
-
-            <section class="panel chat-panel">
-              <div class="panel-header">
-                <h2>6. Ask Findings</h2>
-                <span id="chatBadge" class="badge idle">idle</span>
-              </div>
-              <label for="chatQuestion">Question about searched results</label>
-              <textarea id="chatQuestion" rows="2" placeholder="What were the top AI trends found?"></textarea>
-              <div class="button-row two tight">
-                <button id="askChat" class="primary">Ask</button>
-                <button id="clearChat">Clear</button>
-              </div>
-              <pre id="chatAnswer" class="viewer wrap chat-answer">Ask a question to get an answer from stored findings.</pre>
-            </section>
-          </section>
+          <section class="panel stats-panel">
+            <div class="panel-header">
+              <h2>2. Status</h2>
+              <span id="statusBadge" class="badge idle">idle</span>
+            </div>
+            <div class="stats-grid">
+              <article class="stat-card">
+                <p>Iterations</p>
+                <h3 id="statIterations">-</h3>
+              </article>
+              <article class="stat-card">
+                <p>Failures</p>
+                <h3 id="statFailures">-</h3>
+              </article>
+              <article class="stat-card">
+                <p>Completed</p>
+                <h3 id="statCompleted">-</h3>
+              </article>
+              <article class="stat-card">
+                <p>Remaining</p>
+                <h3 id="statRemaining">-</h3>
+              </article>
+            </div>
           </section>
 
           <section class="panel view-panel">
@@ -114,40 +112,40 @@
           </div>
           <pre id="latestOutput" class="viewer wrap">No output available yet.</pre>
         </section>
-      </section>
 
-      <section class="panel tools-panel">
-        <div class="panel-header">
-          <h2>5. Tools Used</h2>
-          <span id="toolsBadge" class="badge idle">none</span>
-        </div>
-        <div id="toolsUsed" class="tools-list">
-          <p class="hint">No tools called yet.</p>
-        </div>
-      </section>
+        <section class="panel tools-panel">
+          <div class="panel-header">
+            <h2>5. Tools Used</h2>
+            <span id="toolsBadge" class="badge idle">none</span>
+          </div>
+          <div id="toolsUsed" class="tools-list">
+            <p class="hint">No tools called yet.</p>
+          </div>
+        </section>
 
-      <section class="panel chat-panel">
-        <div class="panel-header">
-          <h2>6. Ask Findings</h2>
-          <span id="chatBadge" class="badge idle">idle</span>
-        </div>
-        <label for="chatQuestion">Question about searched results</label>
-        <textarea id="chatQuestion" rows="2" placeholder="What were the top AI trends found?"></textarea>
-        <div class="button-row two tight">
-          <button id="askChat" class="primary">Ask</button>
-          <button id="clearChat">Clear</button>
-        </div>
-        <pre id="chatAnswer" class="viewer wrap chat-answer">Ask a question to get an answer from stored findings.</pre>
-      </section>
+        <section class="panel chat-panel">
+          <div class="panel-header">
+            <h2>6. Ask Findings</h2>
+            <span id="chatBadge" class="badge idle">idle</span>
+          </div>
+          <label for="chatQuestion">Question about searched results</label>
+          <textarea id="chatQuestion" rows="2" placeholder="What were the top AI trends found?"></textarea>
+          <div class="button-row two tight">
+            <button id="askChat" class="primary">Ask</button>
+            <button id="clearChat">Clear</button>
+          </div>
+          <pre id="chatAnswer" class="viewer wrap chat-answer">Ask a question to get an answer from stored findings.</pre>
+        </section>
 
-      <section class="panel data-panel">
-        <div class="panel-header">
-          <h2 id="outputTitle">7. Current State</h2>
-        </div>
-        <pre id="stateOutput" class="viewer wrap">Loading...</pre>
+        <section class="panel data-panel">
+          <div class="panel-header">
+            <h2 id="outputTitle">7. Current State</h2>
+          </div>
+          <pre id="stateOutput" class="viewer wrap">Loading...</pre>
+        </section>
       </section>
     </main>
 
-    <script src="./app.js?v=20260418-8" defer></script>
+    <script src="./app.js?v=20260418-9" defer></script>
   </body>
 </html>
