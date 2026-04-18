@@ -468,7 +468,6 @@ function formatStateText(state) {
   const completed = countItems(state.completed_steps);
   const remaining = countItems(state.remaining_steps);
   const lastOutput = normalizeTextBlock(extractLatestOutputBody(state, "state")) || "No output available yet.";
-  const compactOutput = lastOutput.length > 260 ? `${lastOutput.slice(0, 257)}...` : lastOutput;
 
   return [
     `Goal: ${goal}`,
@@ -478,8 +477,8 @@ function formatStateText(state) {
     `Completed: ${completed}`,
     `Remaining: ${remaining}`,
     "",
-    "Latest output preview:",
-    compactOutput,
+    "Latest output:",
+    lastOutput,
   ].join("\n");
 }
 
