@@ -28,8 +28,7 @@ body {
   font-family: "Chivo", "Segoe UI", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(1200px 700px at 10% 0%, #394f83 0%, transparent 60%),
-    radial-gradient(1000px 700px at 85% -5%, #543f91 0%, transparent 65%),
+    radial-gradient(1200px 700px at 10% 0%, #30466f 0%, transparent 60%),
     linear-gradient(135deg, var(--bg-deep), var(--bg-mid));
   overflow-x: hidden;
 }
@@ -42,13 +41,13 @@ body {
 }
 
 .bg-noise {
-  opacity: 0.08;
+  opacity: 0.03;
   background-image: radial-gradient(circle at 1px 1px, #fff 1px, transparent 0);
   background-size: 12px 12px;
 }
 
 .bg-grid {
-  opacity: 0.12;
+  opacity: 0.05;
   background:
     linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
@@ -57,20 +56,20 @@ body {
 
 .layout {
   width: min(1280px, 94vw);
-  margin: clamp(16px, 3vw, 38px) auto;
+  margin: clamp(14px, 2.6vw, 28px) auto;
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 14px;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 12px;
   animation: reveal 500ms ease-out both;
 }
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 14px;
   background: var(--panel);
   backdrop-filter: blur(10px);
-  padding: clamp(12px, 2vw, 18px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  padding: clamp(10px, 1.6vw, 14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .hero {
@@ -87,7 +86,7 @@ body {
 
 .hero h1 {
   margin: 8px 0 8px;
-  font: 900 clamp(2rem, 4.6vw, 3.6rem) "Archivo", sans-serif;
+  font: 900 clamp(1.6rem, 3.2vw, 2.5rem) "Archivo", sans-serif;
   line-height: 0.95;
   letter-spacing: 0.01em;
 }
@@ -114,6 +113,10 @@ body {
   grid-column: 2;
 }
 
+.tools-panel {
+  grid-column: 1 / -1;
+}
+
 .data-panel {
   grid-column: 1 / -1;
 }
@@ -124,7 +127,7 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .panel-header h2 {
@@ -162,9 +165,9 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.08);
   color: var(--ink);
-  padding: 10px 12px;
-  border-radius: 12px;
-  min-height: 44px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  min-height: 40px;
   cursor: pointer;
   transition: transform 110ms ease, background-color 110ms ease, border-color 110ms ease;
 }
@@ -189,9 +192,9 @@ button.danger {
 }
 
 .button-row {
-  margin-top: 10px;
+  margin-top: 8px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .button-row.two {
@@ -209,15 +212,15 @@ button.danger {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .stat-card {
   margin: 0;
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(145deg, rgba(42, 63, 102, 0.55), rgba(20, 35, 59, 0.9));
   border: 1px solid var(--line);
-  padding: 10px 12px;
+  padding: 8px 10px;
 }
 
 .stat-card p {
@@ -234,8 +237,8 @@ button.danger {
 .view-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .view-button.active {
@@ -264,7 +267,7 @@ button.danger {
 
 .viewer {
   margin: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--panel-strong);
   color: #ecf1ff;
@@ -284,6 +287,34 @@ button.danger {
 
 .data-panel .viewer {
   min-height: min(36vh, 460px);
+}
+
+.tools-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tool-item {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(14, 30, 52, 0.84);
+  padding: 8px;
+  min-height: 74px;
+}
+
+.tool-item h3 {
+  margin: 0 0 6px;
+  font: 700 0.9rem "Archivo", sans-serif;
+}
+
+.tool-input {
+  margin: 0;
+  font: 400 0.78rem/1.35 "IBM Plex Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted);
 }
 
 .hint {
@@ -335,8 +366,13 @@ button.danger {
   .stats-panel,
   .view-panel,
   .latest-panel,
+  .tools-panel,
   .data-panel {
     grid-column: 1;
+  }
+
+  .tools-list {
+    grid-template-columns: 1fr;
   }
 }
 

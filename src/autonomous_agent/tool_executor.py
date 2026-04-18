@@ -143,6 +143,9 @@ class ToolExecutor:
         if lower.startswith("summarize") or lower.startswith("summary"):
             result = self._summarize_progress(task=normalized, state=state)
             return self._attach_tool_call(result, "summarize_progress", normalized)
+        if self._looks_like_report_task(normalized):
+            result = self._summarize_progress(task=normalized, state=state)
+            return self._attach_tool_call(result, "summarize_progress", normalized)
         if self._looks_like_research_task(normalized):
             query = self._build_research_query(normalized, state)
             result = self.web_search(query)
@@ -190,9 +193,12 @@ class ToolExecutor:
         return self.run_code(f"print({safe_payload})")
 
     def _looks_like_research_task(self, task: str) -> bool:
-        lowered = task.lower()
+        lowered = task.lower().replace("_", " ").replace("-", " ")
         keywords = (
             "search",
+            "gather",
+            "collect",
+            "source",
             "check",
             "monitor",
             "research",
@@ -210,16 +216,40 @@ class ToolExecutor:
         )
         return any(token in lowered for token in keywords)
 
+    def _looks_like_report_task(self, task: str) -> bool:
+        lowered = task.lower().replace("_", " ").replace("-", " ")
+        keywords = (
+            "make report",
+            "make a report",
+            "write report",
+            "generate report",
+            "final report",
+            "summarize",
+            "synthesize",
+            "finalize",
+        )
+        return any(token in lowered for token in keywords)
+
     def _build_research_query(self, task: str, state: dict[str, Any] | None) -> str:
         # Planner steps can be machine-like labels (e.g., check_ai_releases).
         # Convert them into a search-friendly query and fall back to goal text.
         normalized_task = task.replace("_", " ").replace("-", " ").strip()
         goal = (state or {}).get("goal") if state else None
+        combined_text = f"{goal or ''} {normalized_task}".lower()
+
+        if "ai" in combined_text and "trend" in combined_text:
+            return (
+                "latest AI trends 2026 generative ai enterprise adoption model releases "
+                "openai anthropic google microsoft meta"
+            )
 
         generic_labels = {
             "search ai trends",
             "search for ai trends",
             "research ai trends",
+            "gather relevant data",
+            "collect relevant data",
+            "analyze findings",
             "check ai releases",
             "monitor ai releases",
             "identify notable changes",
@@ -240,7 +270,18 @@ class ToolExecutor:
         if goal and len(normalized_task.split()) <= 3:
             return f"{goal} {normalized_task}"
 
-        return normalized_task
+        cleaned_query = normalized_task
+        query_noise = (
+            "make a report",
+            "and make a report",
+            "write a report",
+            "summarize findings",
+            "create summary",
+        )
+        for phrase in query_noise:
+            cleaned_query = cleaned_query.replace(phrase, " ")
+        cleaned_query = " ".join(cleaned_query.split())
+        return cleaned_query or normalized_task
 
     def web_search(self, query: str) -> dict[str, Any]:
         escaped_query = json.dumps(query)
@@ -285,6 +326,8 @@ class ToolExecutor:
         )
         result = self.run_code(script)
         if result.get("status") == "ok":
+            report_text = self._build_search_report(result.get("output", ""), query)
+            result["output"] = self._format_report_output(report_text)
             return result
         return {
             "status": "failed",
@@ -292,6 +335,23 @@ class ToolExecutor:
             "error": result.get("error", "search failed"),
             "output": result.get("output"),
         }
+
+    def _build_search_report(self, output: str, query: str) -> str:
+        cleaned = self._clean_output_text(output)
+        lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+        if not lines:
+            return f"Search query: {query}\nNo relevant findings were returned."
+
+        top_lines = lines[:5]
+        report_lines = [
+            f"Search query: {query}",
+            "Top findings:",
+        ]
+        for line in top_lines:
+            report_lines.append(f"- {line}")
+
+        report_lines.append("Summary: These are the most recent signals matching the search query.")
+        return "\n".join(report_lines)
 
     def web_fetch(self, url: str) -> dict[str, Any]:
         try:

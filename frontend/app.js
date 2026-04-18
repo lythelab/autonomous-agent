@@ -7,6 +7,8 @@ const outputTitle = document.getElementById("outputTitle");
 const statusBadge = document.getElementById("statusBadge");
 const viewBadge = document.getElementById("viewBadge");
 const backendBadge = document.getElementById("backendBadge");
+const toolsBadge = document.getElementById("toolsBadge");
+const toolsUsed = document.getElementById("toolsUsed");
 
 const setGoalButton = document.getElementById("setGoal");
 const runCycleButton = document.getElementById("runCycle");
@@ -149,8 +151,8 @@ async function refreshView() {
     return;
   }
 
-  const state = await get("/state");
-  renderState(state, "state");
+  const [state, logsText] = await Promise.all([get("/state"), getText("/logs")]);
+  renderState({ ...state, logsText }, "state");
 }
 
 function getBaseUrl() {
@@ -276,11 +278,15 @@ function renderState(state, view = "state") {
   currentRenderedText = renderedText;
   output.textContent = renderedText;
 
+  const tools = extractToolsUsed(state, view);
+  renderToolsUsed(tools);
+
   const stateForStats = view === "both" ? state.state || {} : view === "state" ? state : {};
   renderStats(stateForStats);
 
-  let badgeText = state.status || "idle";
-  let badgeClass = state.status || "idle";
+  const statusSource = view === "both" ? state.state || {} : state;
+  let badgeText = statusSource.status || "idle";
+  let badgeClass = statusSource.status || "idle";
 
   if (view === "logs") {
     badgeText = `logs ${countItems((state.logsText || "").split("\n").filter(Boolean))}`;
@@ -292,6 +298,97 @@ function renderState(state, view = "state") {
 
   statusBadge.textContent = badgeText;
   statusBadge.className = `badge ${badgeClass}`;
+}
+
+function renderToolsUsed(tools) {
+  if (!toolsUsed || !toolsBadge) {
+    return;
+  }
+
+  if (!tools.length) {
+    toolsUsed.innerHTML = '<p class="hint">No tools called yet.</p>';
+    toolsBadge.textContent = "none";
+    toolsBadge.className = "badge idle";
+    return;
+  }
+
+  const html = tools
+    .map((tool) => {
+      const input = tool.input ? `\n${escapeHtml(tool.input)}` : "";
+      return `<article class="tool-item"><h3>${escapeHtml(tool.name)}</h3><pre class="tool-input">${input ? input : "(no input)"}</pre></article>`;
+    })
+    .join("");
+
+  toolsUsed.innerHTML = html;
+  toolsBadge.textContent = String(tools.length);
+  toolsBadge.className = "badge completed";
+}
+
+function extractToolsUsed(state, view) {
+  const seen = new Set();
+  const tools = [];
+
+  const pushTool = (name, input = "") => {
+    const cleanedName = String(name || "").trim();
+    if (!cleanedName) {
+      return;
+    }
+    const cleanedInput = normalizeTextBlock(input || "");
+    const key = `${cleanedName}::${cleanedInput}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    tools.push({ name: cleanedName, input: cleanedInput });
+  };
+
+  const collectFromState = (candidate) => {
+    const calls = candidate?.last_result?.tool_calls;
+    if (!Array.isArray(calls)) {
+      return;
+    }
+    calls.forEach((call) => {
+      if (call && typeof call === "object") {
+        pushTool(call.tool, call.input);
+      }
+    });
+  };
+
+  const collectFromLogs = (logsText) => {
+    const text = typeof logsText === "string" ? logsText : "";
+    const lines = text.split("\n");
+    const marker = "Tool called:";
+    lines.forEach((line) => {
+      const idx = line.indexOf(marker);
+      if (idx === -1) {
+        return;
+      }
+      const payload = line.slice(idx + marker.length).trim();
+      const inputIdx = payload.indexOf(" input=");
+      if (inputIdx === -1) {
+        pushTool(payload, "");
+        return;
+      }
+      const name = payload.slice(0, inputIdx).trim();
+      const input = payload.slice(inputIdx + " input=".length).trim();
+      pushTool(name, input);
+    });
+  };
+
+  if (view === "both") {
+    collectFromState(state?.state || state);
+    collectFromLogs(state?.logsText || "");
+    return tools;
+  }
+
+  if (view === "logs") {
+    collectFromLogs(state?.logsText || "");
+    return tools;
+  }
+
+  collectFromState(state || {});
+  collectFromLogs(state?.logsText || "");
+  return tools;
 }
 
 function renderStats(state) {
@@ -371,6 +468,7 @@ function formatStateText(state) {
   const completed = countItems(state.completed_steps);
   const remaining = countItems(state.remaining_steps);
   const lastOutput = normalizeTextBlock(extractLatestOutputBody(state, "state")) || "No output available yet.";
+  const compactOutput = lastOutput.length > 260 ? `${lastOutput.slice(0, 257)}...` : lastOutput;
 
   return [
     `Goal: ${goal}`,
@@ -380,8 +478,8 @@ function formatStateText(state) {
     `Completed: ${completed}`,
     `Remaining: ${remaining}`,
     "",
-    "Latest output:",
-    lastOutput,
+    "Latest output preview:",
+    compactOutput,
   ].join("\n");
 }
 
@@ -422,6 +520,15 @@ function normalizeTextBlock(value) {
   }
 
   return text.trim();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function countItems(value) {

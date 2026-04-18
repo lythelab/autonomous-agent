@@ -202,6 +202,37 @@ def test_execute_task_search_ai_trends_routes_to_web_search() -> None:
     assert any("DDGS" in call for call in sandbox.calls)
 
 
+def test_execute_task_gather_relevant_data_routes_to_web_search() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "gather_relevant_data",
+        state={"goal": "search for latest AI trends and make a report"},
+    )
+
+    assert result["status"] == "ok"
+    assert any("DDGS" in call for call in sandbox.calls)
+
+
+def test_execute_task_make_report_routes_to_summarize() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "make_a_report",
+        state={
+            "goal": "search for latest AI trends and make a report",
+            "completed_steps": ["gather_relevant_data"],
+            "last_result": {"output": "[report]\nSome findings"},
+        },
+    )
+
+    assert result["status"] == "ok"
+    assert any("Goal: search for latest AI trends and make a report" in call for call in sandbox.calls)
+    assert any("Summary:" in call for call in sandbox.calls)
+
+
 def test_run_code_parses_wrapped_logs_output() -> None:
     executor = ToolExecutor(sandbox=WrappedLogsSandbox())
 
