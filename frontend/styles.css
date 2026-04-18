@@ -55,10 +55,10 @@ body {
 }
 
 .layout {
-  width: min(1200px, 94vw);
-  margin: clamp(14px, 2.6vw, 24px) auto;
+  width: min(1120px, 94vw);
+  margin: clamp(12px, 2.2vw, 20px) auto;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   animation: reveal 500ms ease-out both;
 }
 
@@ -67,8 +67,8 @@ body {
   border-radius: 14px;
   background: var(--panel);
   backdrop-filter: blur(10px);
-  padding: clamp(10px, 1.6vw, 14px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  padding: clamp(9px, 1.3vw, 12px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
 }
 
 .hero {
@@ -83,7 +83,7 @@ body {
 }
 
 .hero h1 {
-  margin: 8px 0 8px;
+  margin: 6px 0 6px;
   font: 900 clamp(1.6rem, 3.2vw, 2.5rem) "Archivo", sans-serif;
   line-height: 0.95;
   letter-spacing: 0.01em;
@@ -113,18 +113,26 @@ body {
 
 .top-row {
   display: grid;
-  grid-template-columns: 1.25fr 0.95fr;
-  gap: 12px;
+  grid-template-columns: 1.3fr 0.85fr;
+  gap: 10px;
+  align-items: start;
 }
 
 .side-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .outputs-row {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.middle-row {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 10px;
+  align-items: start;
 }
 
 .panel-header {
@@ -133,7 +141,7 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .panel-header h2 {
@@ -218,7 +226,7 @@ button.danger {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .stat-card {
@@ -226,7 +234,7 @@ button.danger {
   border-radius: 10px;
   background: linear-gradient(145deg, rgba(42, 63, 102, 0.55), rgba(20, 35, 59, 0.9));
   border: 1px solid var(--line);
-  padding: 8px 10px;
+  padding: 7px 9px;
 }
 
 .stat-card p {
@@ -243,8 +251,8 @@ button.danger {
 .view-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .view-button.active {
@@ -255,7 +263,7 @@ button.danger {
 
 .viewer-tools {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .toggle {
@@ -280,8 +288,8 @@ button.danger {
   font: 400 0.86rem/1.46 "IBM Plex Mono", monospace;
   overflow: auto;
   max-width: 100%;
-  max-height: min(44vh, 520px);
-  padding: 12px;
+  max-height: min(40vh, 460px);
+  padding: 10px;
   white-space: pre;
 }
 
@@ -292,18 +300,18 @@ button.danger {
 }
 
 .data-panel .viewer {
-  min-height: min(34vh, 420px);
+  min-height: min(30vh, 380px);
 }
 
 .chat-answer {
-  min-height: 130px;
-  margin-top: 8px;
+  min-height: 110px;
+  margin-top: 6px;
 }
 
 .tools-list {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .tool-item {
@@ -312,7 +320,7 @@ button.danger {
   border: 1px solid var(--line);
   background: rgba(14, 30, 52, 0.84);
   padding: 8px;
-  min-height: 74px;
+  min-height: 64px;
 }
 
 .tool-item h3 {
@@ -370,6 +378,10 @@ button.danger {
 
 @media (max-width: 1080px) {
   .top-row {
+    grid-template-columns: 1fr;
+  }
+
+  .middle-row {
     grid-template-columns: 1fr;
   }
 
