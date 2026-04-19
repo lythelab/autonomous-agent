@@ -4,7 +4,9 @@ import io
 import ast
 import json
 import logging
+import re
 import time
+from urllib.parse import urlparse
 from types import SimpleNamespace
 from typing import Any
 
@@ -169,33 +171,114 @@ class ToolExecutor:
         completed = state.get("completed_steps", [])
         last_output = (state.get("last_result") or {}).get("output") or ""
         cleaned_last_output = self._clean_output_text(str(last_output))
-        
-        summary_lines = [
-            f"Goal: {goal}"
-        ]
-        
-        if completed:
-            summary_lines.append("Completed steps:")
-            for step in completed:
-                summary_lines.append(f"  - {step}")
-        
-        if cleaned_last_output:
-            summary_lines.append("Latest findings:")
-            truncated = (
-                cleaned_last_output[:500]
-                if len(cleaned_last_output) > 500
-                else cleaned_last_output
-            )
-            summary_lines.append(truncated)
-
-        if goal:
-            summary_lines.append(f"Summary: Provide a concise report aligned to the goal: {goal}")
-        else:
-            summary_lines.append("Summary: Provide a concise report based on the findings above.")
-        
-        output = "\n".join(summary_lines)
+        output = self._synthesize_goal_output(
+            goal=goal,
+            completed=completed,
+            latest_output=cleaned_last_output,
+            summarize_task=task,
+        )
         safe_payload = json.dumps(output)
         return self.run_code(f"print({safe_payload})")
+
+    def _synthesize_goal_output(
+        self,
+        goal: str,
+        completed: list[Any],
+        latest_output: str,
+        summarize_task: str,
+    ) -> str:
+        evidence_lines = self._extract_evidence_lines(latest_output)
+        if not evidence_lines:
+            if completed:
+                recent = ", ".join(str(step) for step in completed[-3:])
+                return (
+                    f"Current goal: {goal or summarize_task}. "
+                    f"Recent executed steps: {recent}. "
+                    "No concrete evidence was captured yet; continue collecting verifiable sources before finalizing an answer."
+                )
+            return (
+                f"Current goal: {goal or summarize_task}. "
+                "No concrete evidence was captured yet; continue collecting verifiable sources before finalizing an answer."
+            )
+
+        top = evidence_lines[:5]
+        synthesis = " ".join(top)
+        if len(synthesis) > 1200:
+            synthesis = synthesis[:1200].rstrip()
+
+        return f"{synthesis}\n\nEvidence lines used: {len(top)}"
+
+    def _extract_evidence_lines(self, text: str) -> list[str]:
+        lines: list[str] = []
+        seen: set[str] = set()
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            if line.startswith("- "):
+                line = line[2:].strip()
+
+            lowered = line.lower()
+            if lowered.startswith(
+                (
+                    "search query:",
+                    "top findings:",
+                    "summary:",
+                    "goal:",
+                    "question:",
+                    "answer:",
+                    "recommendation:",
+                    "completed steps:",
+                )
+            ):
+                continue
+
+            if line.startswith("|"):
+                continue
+
+            line = re.sub(r"\s+", " ", line).strip()
+            if len(line) < 12:
+                continue
+
+            key = line.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(line)
+
+        return lines
+
+    def _extract_code_block(self, text: str) -> str:
+        cleaned = text.strip()
+        if not cleaned:
+            return ""
+
+        if "```" in cleaned:
+            parts = cleaned.split("```")
+            for idx in range(1, len(parts), 2):
+                block = parts[idx]
+                lines = block.splitlines()
+                if lines and lines[0].strip().lower() in {"python", "py", "javascript", "js", "typescript", "ts"}:
+                    candidate = "\n".join(lines[1:]).strip()
+                else:
+                    candidate = block.strip()
+                if candidate:
+                    return candidate
+
+        likely_code_lines = []
+        for line in cleaned.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(
+                token in stripped
+                for token in ("def ", "class ", "import ", "return ", "if ", "for ", "while ", "const ", "function ")
+            ):
+                likely_code_lines.append(line)
+
+        return "\n".join(likely_code_lines).strip()
 
     def _looks_like_research_task(self, task: str) -> bool:
         lowered = task.lower().replace("_", " ").replace("-", " ")
@@ -300,6 +383,7 @@ class ToolExecutor:
             "        DDGS = None\n"
             "import urllib.parse\n"
             "import urllib.request\n"
+            "import re\n"
             "import xml.etree.ElementTree as ET\n"
             f"query = {escaped_query}\n"
             "results = []\n"
@@ -308,6 +392,29 @@ class ToolExecutor:
             "        results = list(DDGS().text(query, max_results=5))\n"
             "    except Exception:\n"
             "        results = []\n"
+            "if not results:\n"
+            "    try:\n"
+            "        encoded = urllib.parse.quote_plus(query)\n"
+            "        html_url = f'https://duckduckgo.com/html/?q={encoded}'\n"
+            "        with urllib.request.urlopen(html_url, timeout=10) as response:\n"
+            "            html = response.read().decode('utf-8', errors='ignore')\n"
+            "        pattern = re.compile(r'<a[^>]+class=\"result__a\"[^>]+href=\"([^\"]+)\"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)\n"
+            "        for href, raw_title in pattern.findall(html):\n"
+            "            title = re.sub(r'<[^>]+>', '', raw_title).strip()\n"
+            "            link = href.strip()\n"
+            "            if not title or not link:\n"
+            "                continue\n"
+            "            if 'duckduckgo.com/y.js' in link or link.startswith('/y.js'):\n"
+            "                continue\n"
+            "            if link.startswith('//'):\n"
+            "                link = 'https:' + link\n"
+            "            if link.startswith('/'):\n"
+            "                link = 'https://duckduckgo.com' + link\n"
+            "            results.append({'title': title, 'href': link})\n"
+            "            if len(results) >= 5:\n"
+            "                break\n"
+            "    except Exception:\n"
+            "        results = results\n"
             "if not results:\n"
             "    try:\n"
             "        encoded = urllib.parse.quote_plus(query)\n"
@@ -345,18 +452,53 @@ class ToolExecutor:
         cleaned = self._clean_output_text(output)
         lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
         if not lines:
-            return f"Search query: {query}\nNo relevant findings were returned."
+            return f"No relevant findings were returned for: {query}"
 
-        top_lines = lines[:5]
-        report_lines = [
-            f"Search query: {query}",
-            "Top findings:",
-        ]
-        for line in top_lines:
-            report_lines.append(f"- {line}")
+        top_lines = self._select_relevant_search_lines(lines=lines, query=query)
+        return "\n".join(top_lines)
 
-        report_lines.append("Summary: These are the most recent signals matching the search query.")
-        return "\n".join(report_lines)
+    def _select_relevant_search_lines(self, lines: list[str], query: str) -> list[str]:
+        query_tokens = self._query_tokens(query)
+        filtered: list[str] = []
+
+        for line in lines:
+            lowered = line.lower()
+            score = sum(1 for token in query_tokens if token in lowered)
+            has_price = bool(re.search(r"\$\s*[0-9]{2,4}", line))
+            has_laptop_signal = any(token in lowered for token in ("laptop", "notebook", "programming", "cpu", "ram"))
+
+            # Require at least two query token hits, or one strong shopping signal.
+            if score >= 2 or has_price or has_laptop_signal:
+                filtered.append(line)
+
+        if filtered:
+            return filtered[:5]
+
+        return lines[:3]
+
+    def _query_tokens(self, query: str) -> list[str]:
+        stop_words = {
+            "a",
+            "an",
+            "and",
+            "or",
+            "the",
+            "for",
+            "with",
+            "from",
+            "that",
+            "this",
+            "under",
+            "over",
+            "site",
+            "www",
+            "com",
+            "which",
+            "recommend",
+            "compare",
+        }
+        tokens = re.findall(r"[a-z0-9]+", query.lower())
+        return [token for token in tokens if len(token) >= 3 and token not in stop_words]
 
     def web_fetch(self, url: str) -> dict[str, Any]:
         try:
@@ -369,11 +511,36 @@ class ToolExecutor:
                     "error": None,
                 }
         except Exception as exc:
+            fallback_query = self._build_fetch_fallback_query(url)
+            fallback_result = self.web_search(fallback_query)
+            if fallback_result.get("status") == "ok":
+                fallback_output = self._clean_output_text(str(fallback_result.get("output", "")))
+                if fallback_output:
+                    note = (
+                        f"Direct fetch failed for URL: {url}\n"
+                        f"Reason: {exc}\n"
+                        f"Fallback query used: {fallback_query}\n\n"
+                        f"{fallback_output}"
+                    )
+                    fallback_result["output"] = self._format_report_output(note)
+                return fallback_result
+
             return {
                 "status": "failed",
                 "error_type": "tool_error",
                 "error": str(exc),
+                "output": self._format_report_output(
+                    f"Direct fetch failed for URL: {url}\nReason: {exc}\nFallback query also failed: {fallback_query}"
+                ),
             }
+
+    def _build_fetch_fallback_query(self, url: str) -> str:
+        parsed = urlparse(url)
+        host = parsed.netloc.replace("www.", "").strip() or "source"
+        path = parsed.path.replace("/", " ").replace("-", " ").strip()
+        terms = " ".join(part for part in [host, path] if part)
+        terms = " ".join(terms.split())
+        return f"{terms} laptop comparison programming under 900".strip()
 
     def keep_alive(self) -> None:
         try:

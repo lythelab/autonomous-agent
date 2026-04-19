@@ -25,6 +25,7 @@ class StateTracker:
         self.memory.write(self.state_key, state)
 
     def initialize_goal(self, goal: str, steps: list[str]) -> dict[str, Any]:
+        now = time.time()
         state = self.load()
         state.update(
             {
@@ -34,8 +35,13 @@ class StateTracker:
                 "status": "running" if steps else "completed",
                 "iterations": 0,
                 "failure_count": 0,
+                "consecutive_failures": 0,
                 "strategy_notes": [],
                 "last_result": None,
+                "last_output": None,
+                "last_error": None,
+                "last_progress_at": now,
+                "last_plan_refresh_iteration": -1,
             }
         )
         self.save(state)
@@ -49,7 +55,12 @@ class StateTracker:
             "status": "idle",
             "iterations": 0,
             "failure_count": 0,
+            "consecutive_failures": 0,
             "strategy_notes": [],
             "last_result": None,
+            "last_output": None,
+            "last_error": None,
+            "last_progress_at": None,
+            "last_plan_refresh_iteration": -1,
             "updated_at": time.time(),
         }

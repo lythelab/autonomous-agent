@@ -133,3 +133,42 @@ def test_chat_endpoint_handles_empty_context(monkeypatch) -> None:
 
     assert payload["status"] == "ok"
     assert "could not find relevant prior findings" in payload["answer"].lower()
+
+
+def test_chat_endpoint_best_idea_response_is_clean_and_ranked(monkeypatch) -> None:
+    class BestIdeaMemory(FakeMemory):
+        def get_context_pack(self, query: str | None = None, top_k: int = 5) -> dict[str, Any]:
+            return {
+                "summary": "summary text",
+                "recent_episodes": [
+                    {
+                        "key": "episode_a",
+                        "value": {
+                            "result": {
+                                "output": "[report]\nSearch query: YC backed conversational AI companies\n<!DOCTYPE html><html><head><title>YC</title></head></html>\nGoal: tell me about conversational AI trends in YC startups"
+                            }
+                        },
+                    }
+                ],
+                "matches": [
+                    {
+                        "key": "episode_b",
+                        "value": {
+                            "result": {
+                                "output": "[report]\nSearch query: conversational AI trends in startup industry\nSearch query: Y Combinator startups conversational AI"
+                            }
+                        },
+                    }
+                ],
+            }
+
+    agent = FakeAgent()
+    agent.memory = BestIdeaMemory()
+    monkeypatch.setattr(api, "_agent", agent)
+
+    payload = api.chat(api.ChatRequest(question="which is the best idea?", top_k=5))
+
+    assert payload["status"] == "ok"
+    assert "Best idea:" in payload["answer"]
+    assert "<!DOCTYPE html>" not in payload["answer"]
+    assert "Goal:" not in payload["answer"]

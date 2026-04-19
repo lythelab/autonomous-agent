@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from datetime import datetime
 from threading import Lock
@@ -103,22 +104,28 @@ def _extract_chat_snippets(context: dict[str, Any], limit: int = 5) -> list[str]
 
 def _build_chat_answer(question: str, snippets: list[str]) -> str:
     if not snippets:
-        return (
-            "I could not find relevant prior findings for that question yet. "
-            "Run more cycles or ask about a topic the agent has already searched."
+        return "I could not find relevant prior findings for that question yet. Run more cycles or ask about a topic the agent has already searched."
+    
+    from groq import Groq
+    from .config import get_settings
+    settings = get_settings()
+    if not settings.groq_api_key:
+        return "GROQ API key is not configured. Cannot process chat answer."
+    
+    try:
+        client = Groq(api_key=settings.groq_api_key)
+        
+        context_text = "\n\n---\n\n".join(snippets)
+        prompt = f"You are a helpful chatbot assistant for an autonomous agent.\nAnswer the following question based mainly on the provided context snippets.\nWhen providing your answer, do NOT use a strict format, just reply naturally like a chatbot.\n\nContext snippets:\n{context_text}\n\nQuestion: {question}"
+        
+        response = client.chat.completions.create(
+            model=settings.groq_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
         )
-
-    lines = [
-        f"Question: {question.strip()}",
-        "Answer based on stored findings:",
-    ]
-    for snippet in snippets:
-        snippet_lines = [line.strip() for line in snippet.splitlines() if line.strip()]
-        first_line = snippet_lines[0] if snippet_lines else snippet
-        lines.append(f"- {first_line[:280]}")
-
-    lines.append("Use these findings as context for your next goal or follow-up question.")
-    return "\n".join(lines)
+        return response.choices[0].message.content or "No response generated."
+    except Exception as e:
+        return f"Error generating chat response: {e}"
 
 
 def _summarize_recent_episodes(full_episodes: list[dict[str, Any]]) -> str | None:
@@ -297,8 +304,13 @@ def reset() -> dict[str, Any]:
             "status": "idle",
             "iterations": 0,
             "failure_count": 0,
+            "consecutive_failures": 0,
             "strategy_notes": [],
             "last_result": None,
+            "last_output": None,
+            "last_error": None,
+            "last_progress_at": None,
+            "last_plan_refresh_iteration": -1,
             "updated_at": time.time(),
         }
         _agent.save_state(state)

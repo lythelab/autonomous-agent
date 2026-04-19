@@ -552,9 +552,9 @@ function formatStateText(state) {
 function formatLatestReport(text) {
   const cleaned = normalizeTextBlock(text);
   if (!cleaned) {
-    return "[report]\nNo output available yet.";
+    return "No output available yet.";
   }
-  return `[report]\n${cleaned}`;
+  return cleaned;
 }
 
 function normalizeTextBlock(value) {

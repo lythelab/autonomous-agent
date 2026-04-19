@@ -23,6 +23,10 @@ class Settings:
     max_full_episodes: int
     max_iterations: int
     cycle_sleep_seconds: float
+    failure_backoff_seconds: float
+    max_backoff_seconds: float
+    stale_goal_failure_threshold: int
+    snapshot_interval_cycles: int
 
 
 def load_environment(dotenv_path: str | Path | None = None) -> None:
@@ -54,6 +58,10 @@ def get_settings(dotenv_path: str | Path | None = None) -> Settings:
         max_full_episodes=int(os.getenv("AGENT_MAX_FULL_EPISODES", "25")),
         max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "100000")),
         cycle_sleep_seconds=float(os.getenv("AGENT_CYCLE_SLEEP_SECONDS", "5")),
+        failure_backoff_seconds=float(os.getenv("AGENT_FAILURE_BACKOFF_SECONDS", "1.0")),
+        max_backoff_seconds=float(os.getenv("AGENT_MAX_BACKOFF_SECONDS", "30.0")),
+        stale_goal_failure_threshold=int(os.getenv("AGENT_STALE_FAILURE_THRESHOLD", "6")),
+        snapshot_interval_cycles=int(os.getenv("AGENT_SNAPSHOT_INTERVAL_CYCLES", "50")),
     )
 
 

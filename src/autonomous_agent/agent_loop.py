@@ -28,6 +28,10 @@ class AgentLoop:
         reflection_engine: ReflectionEngine | None = None,
         max_iterations: int = 1_000,
         cycle_sleep_seconds: float = 0.0,
+        failure_backoff_seconds: float = 1.0,
+        max_backoff_seconds: float = 30.0,
+        stale_goal_failure_threshold: int = 6,
+        snapshot_interval_cycles: int = 50,
     ) -> None:
         self.memory = memory
         self.state_tracker = StateTracker(memory=memory, state_key=state_key)
@@ -37,6 +41,10 @@ class AgentLoop:
         self.reflection_engine = reflection_engine or ReflectionEngine()
         self.max_iterations = max_iterations
         self.cycle_sleep_seconds = cycle_sleep_seconds
+        self.failure_backoff_seconds = max(0.0, failure_backoff_seconds)
+        self.max_backoff_seconds = max(0.0, max_backoff_seconds)
+        self.stale_goal_failure_threshold = max(1, stale_goal_failure_threshold)
+        self.snapshot_interval_cycles = max(1, snapshot_interval_cycles)
 
     def load_state(self) -> dict[str, Any]:
         return self.state_tracker.load()
@@ -63,6 +71,7 @@ class AgentLoop:
     def execute_step(self, step: str) -> dict[str, Any]:
         state = self.load_state()
         result = self._execute(step, state)
+        output_text = str(result.get("output", "") or "").strip()
 
         if result.get("status") == "ok":
             completed_steps = list(state.get("completed_steps", []))
@@ -73,8 +82,17 @@ class AgentLoop:
                 item for item in state.get("remaining_steps", []) if item != step
             ]
             state["failure_count"] = 0
+            state["consecutive_failures"] = 0
+            if output_text:
+                state["last_output"] = output_text
+            state["last_error"] = None
+            state["last_progress_at"] = time.time()
         else:
             state["failure_count"] = int(state.get("failure_count", 0)) + 1
+            state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+            state["last_error"] = str(result.get("error", "") or "").strip() or None
+            if output_text:
+                state["last_output"] = output_text
 
         state["iterations"] = int(state.get("iterations", 0)) + 1
         state["last_result"] = result
@@ -101,6 +119,7 @@ class AgentLoop:
                 for candidate in revised
                 if candidate not in state.get("completed_steps", [])
             ]
+            self._maybe_refresh_stale_plan(state)
         else:
             state["status"] = "running"
 
@@ -146,7 +165,26 @@ class AgentLoop:
             return {"status": "completed", "step": None, "result": None}
 
         logger.info("Executing step=%r", next_step)
-        result = self.execute_step(next_step)
+        try:
+            result = self.execute_step(next_step)
+        except Exception as exc:  # noqa: BLE001 - loop should survive unexpected step failures
+            logger.exception("Unhandled exception while executing step=%r", next_step)
+            state = self.load_state()
+            state["failure_count"] = int(state.get("failure_count", 0)) + 1
+            state["consecutive_failures"] = int(state.get("consecutive_failures", 0)) + 1
+            state["last_error"] = str(exc)
+            state["iterations"] = int(state.get("iterations", 0)) + 1
+            state["status"] = "running"
+            state.setdefault("strategy_notes", []).append("Recovered from unexpected execution exception.")
+            self._maybe_refresh_stale_plan(state)
+            self.save_state(state)
+            self._post_cycle_maintenance()
+            return {
+                "status": "failed",
+                "step": next_step,
+                "result": {"status": "failed", "error_type": "tool_error", "error": str(exc)},
+                "state": self.load_state(),
+            }
         logger.info(
             "Finished step=%r result_status=%s error=%r",
             next_step,
@@ -168,12 +206,10 @@ class AgentLoop:
         while cycles < limit:
             cycle_result = self.run_cycle()
             cycles += 1
+            self._maybe_checkpoint(cycle_index=cycles, reason="run")
             if cycle_result["status"] == "completed":
                 break
-            if cycle_result["status"] == "failed":
-                break
-            if self.cycle_sleep_seconds > 0:
-                time.sleep(self.cycle_sleep_seconds)
+            self._sleep_for_current_state()
 
         return self.load_state()
 
@@ -195,6 +231,7 @@ class AgentLoop:
         while iterations < self.max_iterations:
             cycle_result = self.run_cycle()
             iterations += 1
+            self._maybe_checkpoint(cycle_index=iterations, reason="run_forever")
 
             if stop_when_completed and cycle_result["status"] == "completed":
                 logger.info("Run stopped because goal completed")
@@ -209,8 +246,7 @@ class AgentLoop:
                 )
                 break
 
-            if self.cycle_sleep_seconds > 0:
-                time.sleep(self.cycle_sleep_seconds)
+            self._sleep_for_current_state()
 
         final_state = self.load_state()
         if timeout_reached and final_state.get("status") != "completed":
@@ -244,3 +280,62 @@ class AgentLoop:
             except Exception:
                 # Keep-alive failure is non-fatal; execution path handles retries.
                 pass
+
+    def _sleep_for_current_state(self) -> None:
+        state = self.load_state()
+        consecutive_failures = int(state.get("consecutive_failures", 0))
+        if consecutive_failures <= 0:
+            sleep_seconds = self.cycle_sleep_seconds
+        else:
+            growth = 2 ** max(0, consecutive_failures - 1)
+            adaptive = min(self.max_backoff_seconds, self.failure_backoff_seconds * growth)
+            sleep_seconds = self.cycle_sleep_seconds + adaptive
+
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+
+    def _maybe_refresh_stale_plan(self, state: dict[str, Any]) -> None:
+        failures = int(state.get("consecutive_failures", 0))
+        if failures < self.stale_goal_failure_threshold:
+            return
+
+        goal = state.get("goal") or ""
+        if not goal:
+            return
+
+        current_iteration = int(state.get("iterations", 0))
+        last_refresh_iteration = int(state.get("last_plan_refresh_iteration", -1))
+        if last_refresh_iteration == current_iteration:
+            return
+
+        context = self.memory.get_context_pack(query=goal, top_k=5)
+        replanned = self.planner.create_plan(goal, context)
+        refreshed = [
+            step
+            for step in replanned
+            if step not in state.get("completed_steps", [])
+        ]
+        if not refreshed:
+            refreshed = [f"search: {goal}"]
+
+        state["remaining_steps"] = refreshed
+        state["last_plan_refresh_iteration"] = current_iteration
+        state.setdefault("strategy_notes", []).append(
+            "Refreshed stale plan after repeated failures."
+        )
+
+    def _maybe_checkpoint(self, cycle_index: int, reason: str) -> None:
+        if cycle_index % self.snapshot_interval_cycles != 0:
+            return
+
+        state = self.load_state()
+        snapshot_key = f"checkpoint_{int(time.time() * 1000)}"
+        self.memory.write(
+            snapshot_key,
+            {
+                "entry_type": "checkpoint",
+                "reason": reason,
+                "cycle_index": cycle_index,
+                "state": state,
+            },
+        )

@@ -54,6 +54,10 @@ def build_default_agent(
         tool_executor=tool_executor,
         max_iterations=resolved_max_iterations,
         cycle_sleep_seconds=resolved_cycle_sleep,
+        failure_backoff_seconds=settings.failure_backoff_seconds,
+        max_backoff_seconds=settings.max_backoff_seconds,
+        stale_goal_failure_threshold=settings.stale_goal_failure_threshold,
+        snapshot_interval_cycles=settings.snapshot_interval_cycles,
     )
 
 

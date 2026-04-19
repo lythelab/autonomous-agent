@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import autonomous_agent.agent_loop as agent_loop_module
 from autonomous_agent import AgentLoop, MemoryManager, ReflectionEngine, TaskPlanner, ToolExecutor
 
 
@@ -185,3 +186,99 @@ def test_run_forever_marks_timeout_when_runtime_limit_hit(tmp_path: Path) -> Non
     assert state["status"] == "timeout"
     assert state["completed_steps"] == ["step_1"]
     assert state["remaining_steps"] == ["step_2"]
+
+
+def test_agent_preserves_last_output_after_failure(tmp_path: Path) -> None:
+    memory = MemoryManager(db_path=tmp_path / "last_output.db")
+    responses = iter(
+        [
+            {"status": "ok", "output": "first useful output"},
+            {"status": "failed", "error_type": "tool_error", "error": "fetch blocked"},
+        ]
+    )
+
+    def sequenced_executor(step: str, state: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
+        return next(responses)
+
+    agent = AgentLoop(
+        memory=memory,
+        executor=sequenced_executor,
+        planner=StubPlanner(["search: first", "fetch: blocked"]),
+        reflection_engine=StubReflectionEngine(),
+    )
+    agent.set_goal("Compare options", ["search: first", "fetch: blocked"])
+
+    agent.run_cycle()
+    agent.run_cycle()
+    state = agent.load_state()
+
+    assert state["last_output"] == "first useful output"
+    assert state["last_error"] == "fetch blocked"
+
+
+def test_run_uses_adaptive_backoff_after_failures(tmp_path: Path, monkeypatch) -> None:
+    memory = MemoryManager(db_path=tmp_path / "backoff.db")
+
+    sleeps: list[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(agent_loop_module.time, "sleep", fake_sleep)
+
+    def failing_executor(step: str, state: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
+        return {"status": "failed", "error_type": "tool_error", "error": "temporary"}
+
+    agent = AgentLoop(
+        memory=memory,
+        executor=failing_executor,
+        cycle_sleep_seconds=0.0,
+        failure_backoff_seconds=0.1,
+        max_backoff_seconds=0.4,
+    )
+    agent.set_goal("Backoff goal", ["step_1", "step_2", "step_3"])
+
+    agent.run(max_cycles=3)
+
+    # After repeated failures, sleep should increase and clamp to max_backoff_seconds.
+    assert sleeps[:3] == [0.1, 0.2, 0.4]
+
+
+def test_run_forever_writes_periodic_checkpoints(tmp_path: Path) -> None:
+    memory = MemoryManager(db_path=tmp_path / "checkpoint.db")
+    agent = AgentLoop(memory=memory, snapshot_interval_cycles=1)
+    agent.set_goal("Checkpoint goal", ["step_1", "step_2"])
+
+    agent.run(max_cycles=2)
+
+    records = memory.search("checkpoint", top_k=10)
+    assert any(str(record.get("key", "")).startswith("checkpoint_") for record in records)
+
+
+def test_agent_refreshes_stale_plan_after_repeated_failures(tmp_path: Path) -> None:
+    memory = MemoryManager(db_path=tmp_path / "stale_refresh.db")
+
+    class RefreshPlanner(TaskPlanner):
+        def create_plan(self, goal: str, memory_context: dict[str, Any] | None = None) -> list[str]:  # noqa: ARG002
+            return ["search: refreshed approach", "summarize: refreshed"]
+
+        def revise_plan(self, goal: str, state: dict[str, Any], reflection: dict[str, Any]) -> list[str]:  # noqa: ARG002
+            return ["search: original failing path"]
+
+    def failing_executor(step: str, state: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
+        return {"status": "failed", "error_type": "tool_error", "error": "still failing"}
+
+    agent = AgentLoop(
+        memory=memory,
+        executor=failing_executor,
+        planner=RefreshPlanner(),
+        stale_goal_failure_threshold=2,
+    )
+    agent.set_goal("Refresh goal", ["search: original failing path"])
+
+    agent.run_cycle()
+    agent.run_cycle()
+
+    state = agent.load_state()
+    assert state["remaining_steps"][0] == "search: refreshed approach"
+    assert any("Refreshed stale plan" in note for note in state.get("strategy_notes", []))

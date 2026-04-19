@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from urllib.parse import urlparse
 from typing import Any
 
 from .config import get_settings
@@ -42,7 +43,8 @@ class TaskPlanner:
                             "Each task must be directly runnable by this agent and should use one of these prefixes when relevant: "
                             "search:, fetch:, code:, summarize:. "
                             "Do not return generic placeholders. "
-                            "The final task should usually be a summarize task that synthesizes findings for the goal."
+                            "The final task must be a summarize task that synthesizes concrete evidence collected so far. "
+                            "Do not request fixed templates or rigid output formats."
                         ),
                     },
                     {
@@ -52,7 +54,9 @@ class TaskPlanner:
                 ],
             )
             content = response.choices[0].message.content.strip()
-            return self._parse_plan(content) or self._heuristic_plan(goal)
+            parsed = self._parse_plan(content)
+            normalized = self._normalize_steps(parsed, goal=goal)
+            return normalized or self._heuristic_plan(goal)
         except Exception:
             return self._heuristic_plan(goal)
 
@@ -91,7 +95,8 @@ class TaskPlanner:
             "Memory context (JSON):\n"
             f"{json.dumps(context, sort_keys=True)}\n\n"
             "Return only a JSON array of executable tasks. "
-            "Prefer concrete web searches over vague steps."
+            "Prefer concrete web searches over vague steps. "
+            "Always include a final summarize task that synthesizes findings and clearly states missing evidence."
         )
 
     def _parse_plan(self, content: str) -> list[str]:
@@ -113,12 +118,66 @@ class TaskPlanner:
                 steps.append(item.strip())
         return steps
 
+    def _normalize_steps(self, steps: list[str], goal: str) -> list[str]:
+        seen: set[str] = set()
+        normalized: list[str] = []
+
+        for step in steps:
+            candidate = step.strip()
+            if not candidate:
+                continue
+
+            lowered = candidate.lower()
+            if lowered.startswith("fetch:"):
+                safe_step = self._normalize_fetch_step(candidate, goal)
+                if safe_step:
+                    candidate = safe_step
+
+            key = candidate.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(candidate)
+
+        summarize_steps = [s for s in normalized if s.lower().startswith("summarize:")]
+        non_summarize_steps = [s for s in normalized if not s.lower().startswith("summarize:")]
+
+        if not non_summarize_steps:
+            non_summarize_steps = [f"search: {goal}".strip()]
+
+        final_summarize = summarize_steps[-1] if summarize_steps else self._final_summarize_step(goal)
+
+        return [*non_summarize_steps[:5], final_summarize]
+
+    def _normalize_fetch_step(self, step: str, goal: str) -> str:
+        raw = step.split(":", 1)[1].strip() if ":" in step else ""
+        if not raw:
+            return f"search: {goal}"
+
+        parsed = urlparse(raw)
+        host = parsed.netloc.lower()
+        blocked_hosts = {
+            "www.amazon.com",
+            "amazon.com",
+            "www.cnet.com",
+            "cnet.com",
+            "www.pcmag.com",
+            "pcmag.com",
+            "www.rtings.com",
+            "rtings.com",
+        }
+
+        if host in blocked_hosts:
+            return f"search: {goal} site:{host}"
+
+        return step
+
     def _heuristic_plan(self, goal: str) -> list[str]:
         normalized_goal = " ".join(goal.split()).strip()
         if not normalized_goal:
             return [
                 "search: latest AI and technology updates",
-                "summarize: Summarize the key findings and recommended next actions",
+                "summarize: Synthesize the strongest findings collected so far and identify what evidence is still missing.",
             ]
 
         lowered = normalized_goal.lower()
@@ -144,7 +203,7 @@ class TaskPlanner:
             return [
                 f"search: {normalized_goal}",
                 f"search: {normalized_goal} site:ycombinator.com OR site:techcrunch.com OR site:venturebeat.com",
-                f"summarize: Synthesize the most important findings for goal: {normalized_goal}",
+                self._final_summarize_step(normalized_goal),
             ]
 
         chunks = [part.strip(" .") for part in re.split(r"[.;]|\band\b", normalized_goal, flags=re.IGNORECASE)]
@@ -154,10 +213,16 @@ class TaskPlanner:
             steps: list[str] = [f"search: {chunks[0]}"]
             if len(chunks) > 1:
                 steps.extend(f"search: {part}" for part in chunks[1:3])
-            steps.append(f"summarize: Provide a concise result for goal: {normalized_goal}")
+            steps.append(self._final_summarize_step(normalized_goal))
             return steps
 
         return [
             f"search: {normalized_goal}",
-            f"summarize: Provide a concise result for goal: {normalized_goal}",
+            self._final_summarize_step(normalized_goal),
         ]
+
+    def _final_summarize_step(self, goal: str) -> str:
+        return (
+            "summarize: Synthesize the best answer for goal: "
+            f"{goal}. Use concrete evidence from completed steps only, avoid placeholders, and call out missing information explicitly."
+        )

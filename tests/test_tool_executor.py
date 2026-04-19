@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.error
 from types import SimpleNamespace
 from typing import Any
 
@@ -163,7 +164,8 @@ def test_execute_task_summarize_task_uses_state_context() -> None:
     )
 
     assert result["status"] == "ok"
-    assert any("Summary:" in call for call in sandbox.calls)
+    assert any("Found release highlights" in call for call in sandbox.calls)
+    assert any("Evidence lines used" in call for call in sandbox.calls)
 
 
 def test_execute_task_plain_research_text_uses_web_search() -> None:
@@ -229,8 +231,8 @@ def test_execute_task_make_report_routes_to_summarize() -> None:
     )
 
     assert result["status"] == "ok"
-    assert any("Goal: search for latest AI trends and make a report" in call for call in sandbox.calls)
-    assert any("Summary:" in call for call in sandbox.calls)
+    assert any("Some findings" in call for call in sandbox.calls)
+    assert any("Evidence lines used" in call for call in sandbox.calls)
 
 
 def test_execute_task_unknown_text_with_goal_uses_summary_fallback() -> None:
@@ -247,8 +249,71 @@ def test_execute_task_unknown_text_with_goal_uses_summary_fallback() -> None:
     )
 
     assert result["status"] == "ok"
-    assert any("Goal: search for latest conversational AI trends at YC startups" in call for call in sandbox.calls)
-    assert any("Summary:" in call for call in sandbox.calls)
+    assert any("Current goal: search for latest conversational AI trends at YC startups" in call for call in sandbox.calls)
+    assert any("No concrete evidence was captured yet" in call for call in sandbox.calls)
+
+
+def test_execute_task_comparison_goal_produces_generic_synthesis() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "summarize: compare options",
+        state={
+            "goal": "Compare Acer Aspire 5 vs Dell Inspiron 15 vs Lenovo IdeaPad 3 under $900",
+            "completed_steps": ["search: laptop options"],
+            "last_result": {"output": "Acer Aspire 5 - $699\nDell Inspiron 15 - $749\nLenovo IdeaPad 3 - $629"},
+        },
+    )
+
+    assert result["status"] == "ok"
+    assert any("Acer Aspire 5 - $699" in call for call in sandbox.calls)
+    assert any("Evidence lines used" in call for call in sandbox.calls)
+
+
+def test_execute_task_code_goal_produces_generic_synthesis() -> None:
+    sandbox = FakeSandbox()
+    executor = ToolExecutor(sandbox=sandbox)
+
+    result = executor.execute_task(
+        "summarize: finalize code",
+        state={
+            "goal": "Write code for a retry decorator",
+            "completed_steps": ["search: retry decorator patterns"],
+            "last_result": {"output": "No output available."},
+        },
+    )
+
+    assert result["status"] == "ok"
+    assert any("No output available." in call for call in sandbox.calls)
+    assert any("Evidence lines used" in call for call in sandbox.calls)
+
+
+def test_web_fetch_falls_back_to_search_on_failure(monkeypatch) -> None:
+    executor = ToolExecutor(sandbox=FakeSandbox())
+
+    def raise_url_error(url: str, timeout: int = 10) -> Any:  # noqa: ARG001
+        raise urllib.error.URLError("blocked")
+
+    monkeypatch.setattr("urllib.request.urlopen", raise_url_error)
+
+    captured: dict[str, str] = {}
+
+    def fake_web_search(query: str) -> dict[str, Any]:
+        captured["query"] = query
+        return {
+            "status": "ok",
+            "output": "[report]\nSearch query: fallback\nTop findings:\n- example",
+            "error": None,
+        }
+
+    monkeypatch.setattr(executor, "web_search", fake_web_search)
+
+    result = executor.web_fetch("https://www.cnet.com/topics/laptops/best-laptops-for-programming/")
+
+    assert result["status"] == "ok"
+    assert "Fallback query used" in result["output"]
+    assert "cnet.com" in captured["query"]
 
 
 def test_run_code_parses_wrapped_logs_output() -> None:
