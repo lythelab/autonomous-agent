@@ -1,69 +1,33 @@
-from __future__ import annotations
-
-import os
-from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
+from typing import List
 
-try:
-    from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - optional in local environments until dependencies are synced
-    load_dotenv = None
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-@dataclass(frozen=True)
-class Settings:
-    groq_api_key: str | None
-    groq_model: str
-    e2b_api_key: str | None
-    e2b_template: str | None
-    e2b_timeout_seconds: int | None
-    e2b_require_sandbox: bool
-    agent_db_path: str
-    max_full_episodes: int
-    max_iterations: int
-    cycle_sleep_seconds: float
-    failure_backoff_seconds: float
-    max_backoff_seconds: float
-    stale_goal_failure_threshold: int
-    snapshot_interval_cycles: int
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    groq_api_key: str = Field(alias="GROQ_API_KEY")
+    groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
 
-def load_environment(dotenv_path: str | Path | None = None) -> None:
-    if load_dotenv is None:
-        return
-    path = Path(dotenv_path) if dotenv_path is not None else Path(".env")
-    load_dotenv(dotenv_path=path, override=False)
+    e2b_api_key: str = Field(alias="E2B_API_KEY")
+    e2b_timeout_seconds: int = Field(default=3600, alias="E2B_TIMEOUT_SECONDS")
+    e2b_step_timeout_seconds: int = Field(default=120, alias="E2B_STEP_TIMEOUT_SECONDS")
+
+    agent_db_path: str = Field(default="data/agent_state.db", alias="AGENT_DB_PATH")
+    agent_max_full_episodes: int = Field(default=25, alias="AGENT_MAX_FULL_EPISODES")
+    agent_max_iterations: int = Field(default=100000, alias="AGENT_MAX_ITERATIONS")
+    agent_cycle_sleep_seconds: int = Field(default=5, alias="AGENT_CYCLE_SLEEP_SECONDS")
+
+    frontend_origins: str = Field(default="http://localhost:5173", alias="FRONTEND_ORIGINS")
+    frontend_origin_regex: str = Field(default=r"^https?://localhost(:\d+)?$", alias="FRONTEND_ORIGIN_REGEX")
+
+    @property
+    def frontend_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
 
 
 @lru_cache(maxsize=1)
-def get_settings(dotenv_path: str | Path | None = None) -> Settings:
-    load_environment(dotenv_path)
-    require_sandbox = os.getenv("E2B_REQUIRE_SANDBOX", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    timeout_raw = (os.getenv("E2B_TIMEOUT_SECONDS") or "").strip()
-    timeout_seconds = int(timeout_raw) if timeout_raw else None
-    return Settings(
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-        groq_model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        e2b_api_key=os.getenv("E2B_API_KEY"),
-        e2b_template=os.getenv("E2B_TEMPLATE"),
-        e2b_timeout_seconds=timeout_seconds,
-        e2b_require_sandbox=require_sandbox,
-        agent_db_path=os.getenv("AGENT_DB_PATH", "data/agent_state.db"),
-        max_full_episodes=int(os.getenv("AGENT_MAX_FULL_EPISODES", "25")),
-        max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "100000")),
-        cycle_sleep_seconds=float(os.getenv("AGENT_CYCLE_SLEEP_SECONDS", "5")),
-        failure_backoff_seconds=float(os.getenv("AGENT_FAILURE_BACKOFF_SECONDS", "1.0")),
-        max_backoff_seconds=float(os.getenv("AGENT_MAX_BACKOFF_SECONDS", "30.0")),
-        stale_goal_failure_threshold=int(os.getenv("AGENT_STALE_FAILURE_THRESHOLD", "6")),
-        snapshot_interval_cycles=int(os.getenv("AGENT_SNAPSHOT_INTERVAL_CYCLES", "50")),
-    )
-
-
-def clear_settings_cache() -> None:
-    get_settings.cache_clear()
+def get_settings() -> Settings:
+    return Settings()

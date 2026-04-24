@@ -1,128 +1,132 @@
-# Autonomous Agent
+# Long-Running Autonomous Agent
 
-Long-running autonomous agent prototype with persistent memory, resumable goal execution, and sandboxed tool execution.
+An open-source, persistent autonomous AI agent that can run for hours or days, with:
+- Continuous execution loop
+- Goal planning and adaptation (Groq)
+- E2B sandbox execution for actions
+- Long-term memory in SQLite
+- Resume across sessions
+- API control plane for start/stop/status/output
+- Results-only output mode (computation output only)
 
-## Features
+This repository is designed to be self-hosted and extended locally. It includes a Python backend, a Vite/React frontend, and `.env.example` files to make setup reproducible.
 
-- Persistent memory in SQLite via `MemoryManager`
-- Automatic memory compression when full episode count exceeds configured limits
-- Resumable orchestration loop via `AgentLoop`
-- Autonomous planning via `TaskPlanner`
-- Reflection-driven adaptation via `ReflectionEngine`
-- Persistent goal lifecycle tracking via `StateTracker`
-- Sandboxed code and web task execution via `ToolExecutor`
-- Dedicated E2B sandbox session factory via `E2BHandler`
-- Automatic local fallback executor when E2B sandbox is unavailable or unhealthy
-- Long-running runtime wiring for E2B-backed operation via `build_default_agent` and `start_autonomous_goal`
-- Retry and failure taxonomy for tool errors (`llm_error`, `tool_error`, `goal_ambiguity`)
+## Architecture
 
-## Deployment Architecture
+- `FastAPI` API server for orchestration.
+- `AutonomousAgent` background loop for planning, execution, reflection, and memory updates.
+- `GroqPlanner` for planning and episode summarization.
+- `E2BExecutor` for Python code execution in a secure sandbox.
+- `AgentStorage` for persistent sessions, episodes, and long-term memory.
 
-- Frontend: static app in `frontend/`, deploy to Vercel
-- Backend: FastAPI service in `src/autonomous_agent/api.py`
-- Execution runtime: agent code and tool execution in E2B sandboxes managed by `E2BHandler`
+## Project Structure
 
-## Project Layout
+- `src/autonomous_agent/app.py` - FastAPI app and routes
+- `src/autonomous_agent/agent.py` - long-running control loop
+- `src/autonomous_agent/llm.py` - Groq integration
+- `src/autonomous_agent/e2b_runner.py` - E2B code execution adapter
+- `src/autonomous_agent/storage.py` - SQLite persistent state
+- `src/autonomous_agent/main.py` - API/CLI entrypoint
 
-- `src/autonomous_agent/memory_manager.py`: Persistent memory and compression
-- `src/autonomous_agent/agent_loop.py`: Stateful orchestration and resume logic
-- `src/autonomous_agent/task_planner.py`: Goal decomposition and replanning
-- `src/autonomous_agent/reflection_engine.py`: Outcome evaluation and strategy hints
-- `src/autonomous_agent/state_tracker.py`: Persistent goal state helper
-- `src/autonomous_agent/e2b_handler.py`: E2B sandbox creation and lifecycle helpers
-- `src/autonomous_agent/tool_executor.py`: Sandboxed code/web execution with retries
-- `src/autonomous_agent/runtime.py`: Default production wiring for long-running runs
-- `tests/test_memory_manager.py`: Memory manager unit tests
-- `tests/test_agent_loop.py`: Agent loop integration tests with memory
-- `tests/test_tool_executor.py`: Tool executor unit tests
+## Environment
 
-## Setup
+Use `.env` (already present in your workspace):
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e .[dev]
-```
+- `GROQ_API_KEY`
+- `GROQ_MODEL`
+- `E2B_API_KEY`
+- `E2B_TIMEOUT_SECONDS`
+- `E2B_STEP_TIMEOUT_SECONDS`
+- `AGENT_DB_PATH`
+- `AGENT_MAX_FULL_EPISODES`
+- `AGENT_MAX_ITERATIONS`
+- `AGENT_CYCLE_SLEEP_SECONDS`
+- `FRONTEND_ORIGINS`
+- `FRONTEND_ORIGIN_REGEX`
 
-Create your environment file:
+Frontend-specific variables live in `frontend/.env.example`.
 
-```bash
-cp .env.example .env
-```
-
-## Environment Variables
-
-- `GROQ_API_KEY`: Required only when using Groq-backed memory summarization
-- `GROQ_MODEL`: Optional override for summarization model (defaults to `llama-3.3-70b-versatile`)
-- `E2B_API_KEY`: Required only when creating a real E2B `Sandbox` in `ToolExecutor`
-- `E2B_TEMPLATE`: Optional E2B sandbox template name/id used by `E2BHandler`
-- `E2B_TIMEOUT_SECONDS`: Optional sandbox TTL/timeout value forwarded during E2B sandbox creation
-- `E2B_REQUIRE_SANDBOX`: Set to `true` to fail startup when E2B sandbox is unavailable
-- `AGENT_DB_PATH`: Default SQLite state file path
-- `AGENT_MAX_FULL_EPISODES`: Compression threshold for full episodes
-- `AGENT_MAX_ITERATIONS`: Safety cap for long-running loops
-- `AGENT_CYCLE_SLEEP_SECONDS`: Delay between cycles during long runs
-- `BACKEND_API_URL`: Backend base URL exposed to the frontend via `/env`
-
-The project automatically loads values from `.env` via `python-dotenv`.
-
-If E2B is not configured or sandbox creation fails, the runtime logs the exact reason and automatically switches `ToolExecutor` to a local fallback sandbox so the agent can continue running. When a running E2B session expires (for example `sandbox was not found`), `ToolExecutor` attempts to recreate a fresh sandbox before fallback.
-
-## Quick Example
-
-```python
-from autonomous_agent import AgentLoop, MemoryManager
-
-memory = MemoryManager(db_path="data/agent_state.db", max_full_episodes=5)
-agent = AgentLoop(memory=memory)
-
-agent.set_goal(
-	goal="Summarize AI news",
-	steps=["fetch_headlines", "analyze", "write_summary"],
-)
-
-while True:
-	cycle = agent.run_cycle()
-	if cycle["status"] in {"completed", "failed"}:
-		break
-```
-
-## Long-Running Autonomous Run (E2B)
-
-```python
-from autonomous_agent import start_autonomous_goal
-
-final_state = start_autonomous_goal(
-    goal="Monitor AI news and maintain rolling summaries every cycle",
-    db_path="data/agent_state.db",
-    runtime_seconds=1800,
-)
-
-print(final_state["status"], final_state["completed_steps"])
-```
-
-CLI entrypoint:
+## Install
 
 ```bash
-autonomous-agent --goal "Monitor AI news and summarize updates" --runtime-seconds 1800
+pip install -r requirements.txt
+pip install -e .
 ```
 
-`start_autonomous_goal` resumes from saved state if present and uses `ToolExecutor` with an E2B sandbox when dependencies and environment variables are configured.
-
-## Run Tests
+## Run API
 
 ```bash
-pytest --tb=short -v
+python -m autonomous_agent.main --mode api
 ```
 
-See `TESTING.md` for coverage details and what each test validates.
+API endpoints:
+- `GET /health`
+- `POST /agent/start` body: `{ "goal": "...", "session_id": "optional" }`
+- `POST /agent/stop`
+- `GET /agent/status?session_id=...`
+- `GET /agent/output?session_id=...&limit=20`
+- `GET /agent/logs?session_id=...&limit=200`
+- `GET /system/logs?limit=300`
 
-## Deploy on AWS EC2
+## Run CLI (results-only)
 
-This repository is configured for AWS EC2-style deployment of the API service.
+```bash
+python -m autonomous_agent.main --mode cli --goal "Solve X step by step"
+```
 
-The frontend loads the backend URL from `/env`, so set `BACKEND_API_URL` in `.env` and serve the frontend from the same host or reverse proxy it through the API host.
+CLI prints only computation output generated by the agent. Internal logs are stored in `logs/agent.log`.
 
-- Systemd unit template: `deploy/autonomous-agent-api.service`
-- Nginx reverse proxy template: `deploy/nginx-autonomous-agent.conf`
-- Step-by-step deployment guide: `temp/instructions.md`
+## Frontend UI
+
+The project now includes a production-ready frontend in `frontend/` with:
+- Goal input and start/resume controls
+- Stop control
+- Live session status and iteration tracking
+- Computation output stream view (results-only)
+- Live runtime logs and system/API logs panel
+
+Frontend setup:
+
+```bash
+cd frontend
+copy .env.example .env
+npm install
+npm run dev
+```
+
+Frontend environment variable:
+- `VITE_API_BASE_URL` (default `http://localhost:8000`)
+
+Build frontend for production:
+
+```bash
+cd frontend
+npm run build
+```
+
+## Production Notes
+
+- State persists in SQLite (`data/agent_state.db`) across process restarts.
+- Memory updates happen each iteration using concise episode summaries.
+- The loop is resumable by reusing `session_id`.
+- Logging is file-only for clean stdout behavior.
+- Use process supervision in production (systemd, Docker restart policy, PM2, or Kubernetes).
+
+## Open Source
+
+This project is open source. If you publish or redistribute it, add the appropriate `LICENSE` file for the terms you want to use and keep the existing setup instructions current.
+
+## Example Start Request
+
+```bash
+curl -X POST http://localhost:8000/agent/start \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Collect top 5 AI headlines and summarize trends"}'
+```
+
+## Output-Only Contract
+
+To satisfy your requirement that the program should only show computation output:
+- CLI stdout prints only episode outputs.
+- API output endpoint returns only outputs list and session status.
+- Internal diagnostics are written to `logs/agent.log`.
