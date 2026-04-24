@@ -163,7 +163,6 @@ export default function App() {
       <div className="halo halo-right" />
 
       <header className="hero">
-        <p className="kicker">Project 4</p>
         <h1>Autonomous Agent Console</h1>
         <p className="subtitle">
           Launch long-running goals, track progress over time, and view only the actual computation outputs.
