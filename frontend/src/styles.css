@@ -7,7 +7,7 @@
   --line: #2a2a2a;
   --text: #e8e8e8;
   --text-soft: #a4a4a4;
-  --accent: #10b981;
+  --accent: #f59e0b;
   --warn: #f59e0b;
   --danger: #ef4444;
   --info: #60a5fa;
@@ -81,9 +81,9 @@ body {
 }
 
 .new-session-btn {
-  border: 1px solid #216a53;
-  background: rgba(16, 185, 129, 0.1);
-  color: #b7f6df;
+  border: 1px solid #7a5415;
+  background: rgba(245, 158, 11, 0.12);
+  color: #ffe0ab;
   border-radius: 10px;
   padding: 9px 12px;
   font-size: 0.92rem;
@@ -97,8 +97,8 @@ body {
 }
 
 .new-session-btn:hover {
-  background: rgba(16, 185, 129, 0.17);
-  border-color: #2ea77f;
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #a56f1d;
 }
 
 .session-list {
@@ -177,8 +177,8 @@ body {
 }
 
 .status-badge.running {
-  border-color: rgba(16, 185, 129, 0.36);
-  color: #56dfb3;
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #ffd18a;
 }
 
 .status-badge.completed {
@@ -203,9 +203,9 @@ body {
 .message-feed {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 26px 14px;
+  padding: 24px 28px 16px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .message-row {
@@ -221,21 +221,29 @@ body {
 }
 
 .user-bubble {
-  max-width: min(72%, 720px);
+  max-width: min(68%, 660px);
   background: #1d1d1d;
   border: 1px solid #2d2d2d;
   color: #ececec;
-  border-radius: 999px;
-  padding: 11px 16px;
+  border-radius: 22px;
+  padding: 12px 17px;
+  margin-right: 4px;
   font-size: 0.93rem;
   line-height: 1.45;
 }
 
 .agent-text-block {
-  max-width: min(86%, 840px);
+  max-width: min(80%, 780px);
   color: #dddddd;
   line-height: 1.6;
   font-size: 0.95rem;
+}
+
+.action-inline-block {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 9px 10px;
 }
 
 .markdown-block > :first-child {
@@ -317,7 +325,7 @@ body {
   height: 1.05em;
   margin-left: 3px;
   vertical-align: text-bottom;
-  background: rgba(16, 185, 129, 0.8);
+  background: rgba(245, 158, 11, 0.9);
   animation: cursor-blink 1s steps(1) infinite;
 }
 
@@ -333,9 +341,9 @@ body {
 }
 
 .action-pill {
-  border: 1px solid #4b3d1a;
-  color: #f6cb6b;
-  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  color: #f9cd81;
+  background: rgba(245, 158, 11, 0.1);
   border-radius: 999px;
   font-size: 0.76rem;
   font-family: "Geist", sans-serif;
@@ -348,7 +356,7 @@ body {
 }
 
 .action-pill:hover {
-  background: rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.17);
 }
 
 .action-dropdown {
@@ -424,8 +432,8 @@ body {
 }
 
 .input-wrap:focus-within {
-  border-color: #2f9f7b;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.14);
+  border-color: #b47b21;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
 }
 
 .input-wrap input {
@@ -442,7 +450,7 @@ body {
   border: 0;
   border-radius: 12px;
   background: var(--accent);
-  color: #022a1f;
+  color: #2f1d03;
   font-weight: 700;
   font-family: "Geist", sans-serif;
   padding: 9px 14px;
@@ -514,7 +522,7 @@ body {
 .beam-a {
   left: -14%;
   top: -10%;
-  background: rgba(16, 185, 129, 0.28);
+  background: rgba(245, 158, 11, 0.24);
 }
 
 .beam-b {
@@ -586,7 +594,7 @@ body {
 
 .status-dot.running {
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
 }
 
 .status-dot.failed {
@@ -614,6 +622,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.runtime-latest-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+}
+
+.runtime-latest-btn .log-item {
+  margin: 0;
+}
+
+.runtime-latest-btn .chevron {
+  justify-self: end;
+  color: #a9a9a9;
+  font-size: 0.9rem;
 }
 
 .logs-toggle {
@@ -693,33 +722,6 @@ body {
   font-family: "JetBrains Mono", Consolas, monospace;
 }
 
-.session-mini-list {
-  margin-top: auto;
-}
-
-.mini-session {
-  width: 100%;
-  border: 1px solid #2d2d2d;
-  background: #131313;
-  border-radius: 9px;
-  color: #e2e2e2;
-  padding: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.74rem;
-  cursor: pointer;
-  margin-bottom: 6px;
-}
-
-.mini-session strong {
-  font-family: "JetBrains Mono", Consolas, monospace;
-}
-
-.mini-session.active {
-  border-color: #26765b;
-}
-
 .session-inline-id {
   align-items: flex-start;
 }
@@ -765,14 +767,14 @@ body {
 
 @media (max-width: 700px) {
   .message-feed {
-    padding: 18px 12px 10px;
+    padding: 16px 10px 10px;
   }
 
   .user-bubble {
-    max-width: 86%;
+    max-width: 90%;
   }
 
   .agent-text-block {
-    max-width: 96%;
+    max-width: 95%;
   }
 }

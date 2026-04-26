@@ -134,6 +134,7 @@ export default function App() {
   const [sessionHistory, setSessionHistory] = useState<SessionRecord[]>([]);
   const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessage[]>>({});
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({});
+  const [runtimeLogsExpanded, setRuntimeLogsExpanded] = useState(false);
   const [systemLogsExpanded, setSystemLogsExpanded] = useState(false);
 
   const messageFeedRef = useRef<HTMLDivElement | null>(null);
@@ -270,10 +271,8 @@ export default function App() {
       .slice(-12);
   }, [logs]);
 
-  const currentSession = useMemo(
-    () => sessionHistory.find((session) => session.sessionId === activeSessionId) ?? null,
-    [sessionHistory, activeSessionId],
-  );
+  const latestRuntimeLog = logs[logs.length - 1] ?? null;
+  const olderRuntimeLogs = logs.slice(0, Math.max(0, logs.length - 1));
 
   const onNewSession = () => {
     setActiveSessionId("");
@@ -433,58 +432,10 @@ export default function App() {
                 <span className="beam beam-c" />
               </div>
               <h1>Autonomous Agent Console</h1>
-              <p>Start a session to run a goal and continue the thread just like Claude-style chat.</p>
+              <p>Start a session to run a goal and continue the thread in this console.</p>
             </div>
           ) : (
             <>
-              {actionEvents.map((action) => {
-                const expanded = Boolean(expandedActions[action.id]);
-                return (
-                  <div key={action.id} className="message-row assistant-row">
-                    <div className="agent-text-block">
-                      <button
-                        type="button"
-                        className="action-pill"
-                        onClick={() =>
-                          setExpandedActions((previous) => ({
-                            ...previous,
-                            [action.id]: !previous[action.id],
-                          }))
-                        }
-                      >
-                        <span aria-hidden="true">⚡</span>
-                        Action: {action.summary}
-                      </button>
-                      <AnimatePresence initial={false}>
-                        {expanded ? (
-                          <motion.div
-                            className="action-dropdown"
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                          >
-                            <p>
-                              <strong>Raw action detail</strong>
-                            </p>
-                            <pre>{action.detail}</pre>
-                            <p>
-                              <strong>Tool call</strong>
-                            </p>
-                            <pre>{action.toolCall}</pre>
-                            <p>
-                              <strong>Result</strong>
-                            </p>
-                            <pre>{action.result}</pre>
-                            <p className="action-time">{formatTimestamp(action.createdAt)}</p>
-                          </motion.div>
-                        ) : null}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                );
-              })}
-
               {activeMessages.map((message) => (
                 <div
                   key={message.id}
@@ -546,6 +497,54 @@ export default function App() {
                 </div>
               ))}
 
+              {actionEvents.map((action) => {
+                const expanded = Boolean(expandedActions[action.id]);
+                return (
+                  <div key={action.id} className="message-row assistant-row">
+                    <div className="agent-text-block action-inline-block">
+                      <button
+                        type="button"
+                        className="action-pill"
+                        onClick={() =>
+                          setExpandedActions((previous) => ({
+                            ...previous,
+                            [action.id]: !previous[action.id],
+                          }))
+                        }
+                      >
+                        <span aria-hidden="true">⚡</span>
+                        Action: {action.summary}
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {expanded ? (
+                          <motion.div
+                            className="action-dropdown"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                          >
+                            <p>
+                              <strong>Raw action detail</strong>
+                            </p>
+                            <pre>{action.detail}</pre>
+                            <p>
+                              <strong>Tool call</strong>
+                            </p>
+                            <pre>{action.toolCall}</pre>
+                            <p>
+                              <strong>Result</strong>
+                            </p>
+                            <pre>{action.result}</pre>
+                            <p className="action-time">{formatTimestamp(action.createdAt)}</p>
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                );
+              })}
+
               {(chatLoading || busy || uiState === "running") && <ThinkingDots />}
             </>
           )}
@@ -598,21 +597,51 @@ export default function App() {
 
         <section className="logs-section">
           <h3>Agent Runtime Logs</h3>
-          <div className="log-list" ref={runtimeLogsRef}>
-            {logs.length === 0 ? (
-              <p className="sidebar-empty">No runtime logs</p>
-            ) : (
-              logs.map((entry, index) => (
-                <div key={`${entry.created_at}-${index}`} className="log-item">
+          {latestRuntimeLog ? (
+            <>
+              <button
+                type="button"
+                className="runtime-latest-btn"
+                onClick={() => setRuntimeLogsExpanded((previous) => !previous)}
+              >
+                <div className="log-item">
                   <div className="log-head">
-                    <span className={`level-badge ${logLevelClass(entry.level)}`}>{entry.level.toUpperCase()}</span>
-                    <time>{formatTimestamp(entry.created_at)}</time>
+                    <span className={`level-badge ${logLevelClass(latestRuntimeLog.level)}`}>
+                      {latestRuntimeLog.level.toUpperCase()}
+                    </span>
+                    <time>{formatTimestamp(latestRuntimeLog.created_at)}</time>
                   </div>
-                  <p className="log-text">{entry.message}</p>
+                  <p className="log-text">{latestRuntimeLog.message}</p>
                 </div>
-              ))
-            )}
-          </div>
+                <span className={`chevron ${runtimeLogsExpanded ? "open" : ""}`}>⌄</span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {runtimeLogsExpanded && olderRuntimeLogs.length > 0 ? (
+                  <motion.div
+                    className="log-list"
+                    ref={runtimeLogsRef}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    {olderRuntimeLogs.map((entry, index) => (
+                      <div key={`${entry.created_at}-${index}`} className="log-item">
+                        <div className="log-head">
+                          <span className={`level-badge ${logLevelClass(entry.level)}`}>{entry.level.toUpperCase()}</span>
+                          <time>{formatTimestamp(entry.created_at)}</time>
+                        </div>
+                        <p className="log-text">{entry.message}</p>
+                      </div>
+                    ))}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </>
+          ) : (
+            <p className="sidebar-empty">No runtime logs</p>
+          )}
         </section>
 
         <section className="logs-section">
@@ -651,21 +680,6 @@ export default function App() {
           </AnimatePresence>
         </section>
 
-        <section className="session-mini-list">
-          <h3>Recent Sessions</h3>
-          {sessionHistory.slice(0, 4).map((session) => (
-            <button
-              type="button"
-              key={`mini-${session.sessionId}`}
-              className={`mini-session ${session.sessionId === activeSessionId ? "active" : ""}`}
-              onClick={() => setActiveSessionId(session.sessionId)}
-            >
-              <span>{truncate(session.goal || "Untitled", 26)}</span>
-              <strong>{truncate(session.sessionId, 10)}</strong>
-            </button>
-          ))}
-          {sessionHistory.length === 0 ? <p className="sidebar-empty">No sessions tracked</p> : null}
-        </section>
       </aside>
     </motion.div>
   );
