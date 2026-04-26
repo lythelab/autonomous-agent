@@ -121,6 +121,8 @@ function ThinkingDots(): ReactNode {
 
 export default function App() {
   const [activeSessionId, setActiveSessionId] = useState("");
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [runtimeStatus, setRuntimeStatus] = useState<string>("idle");
   const [iteration, setIteration] = useState<number>(0);
   const [outputs, setOutputs] = useState<string[]>([]);
@@ -381,49 +383,68 @@ export default function App() {
 
   return (
     <motion.div
-      className="console-shell"
+      className={`console-shell ${leftSidebarOpen ? "left-open" : "left-collapsed"} ${rightSidebarOpen ? "right-open" : "right-collapsed"}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
     >
       <aside className="panel panel-left">
         <div className="panel-header">
-          <h2>Sessions</h2>
-          <button type="button" className="new-session-btn" onClick={onNewSession}>
-            <span aria-hidden="true">+</span>
-            New Session
-          </button>
+          <div className="panel-header-row">
+            <h2>Sessions</h2>
+            <button
+              type="button"
+              className="panel-toggle"
+              onClick={() => setLeftSidebarOpen((previous) => !previous)}
+              aria-label={leftSidebarOpen ? "Hide sessions sidebar" : "Show sessions sidebar"}
+            >
+              {leftSidebarOpen ? "‹" : "›"}
+            </button>
+          </div>
+          {leftSidebarOpen ? (
+            <button type="button" className="new-session-btn" onClick={onNewSession}>
+              <span aria-hidden="true">+</span>
+              New Session
+            </button>
+          ) : null}
         </div>
 
-        <div className="session-list" aria-label="Past sessions">
-          {sessionHistory.length === 0 ? (
-            <p className="sidebar-empty">No sessions yet</p>
-          ) : (
-            sessionHistory.map((session) => {
-              const active = session.sessionId === activeSessionId;
-              const stateClass = statusToUi(session.status);
-              return (
-                <button
-                  key={session.sessionId}
-                  type="button"
-                  className={`session-card ${active ? "active" : ""}`}
-                  onClick={() => setActiveSessionId(session.sessionId)}
-                >
-                  <p className="session-id-text">{truncate(session.sessionId, 14)}</p>
-                  <p className="session-goal">{truncate(session.goal || "Untitled goal", 40)}</p>
-                  <div className="session-meta">
-                    <span className={`status-badge ${stateClass}`}>{session.status}</span>
-                    <span>{formatTimestamp(session.updatedAt)}</span>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
+        <motion.div
+          className={`sidebar-body left ${leftSidebarOpen ? "expanded" : "collapsed"}`}
+          animate={leftSidebarOpen ? { opacity: 1, x: 0, height: "auto" } : { opacity: 0, x: -8, height: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          <div className="session-list" aria-label="Past sessions">
+            {sessionHistory.length === 0 ? (
+              <p className="sidebar-empty">No sessions yet</p>
+            ) : (
+              sessionHistory.map((session) => {
+                const active = session.sessionId === activeSessionId;
+                const stateClass = statusToUi(session.status);
+                return (
+                  <button
+                    key={session.sessionId}
+                    type="button"
+                    className={`session-card ${active ? "active" : ""}`}
+                    onClick={() => setActiveSessionId(session.sessionId)}
+                  >
+                    <p className="session-id-text">{truncate(session.sessionId, 14)}</p>
+                    <p className="session-goal">{truncate(session.goal || "Untitled goal", 40)}</p>
+                    <div className="session-meta">
+                      <span className={`status-badge ${stateClass}`}>{session.status}</span>
+                      <span>{formatTimestamp(session.updatedAt)}</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </motion.div>
       </aside>
 
       <main className="panel panel-center">
-        <div className="message-feed" ref={messageFeedRef}>
+        <div className="center-column">
+          <div className="message-feed" ref={messageFeedRef}>
           {!activeSessionId && sessionHistory.length === 0 ? (
             <div className="empty-state">
               <div className="aurora-backdrop" aria-hidden="true">
@@ -548,138 +569,160 @@ export default function App() {
               {(chatLoading || busy || uiState === "running") && <ThinkingDots />}
             </>
           )}
-        </div>
-
-        <form className="chat-input-bar" onSubmit={onSubmitInput}>
-          <div className="input-wrap">
-            <input
-              value={chatInput}
-              onChange={(event) => setChatInput(event.target.value)}
-              placeholder={
-                activeSessionId
-                  ? "Message the agent about this session"
-                  : "Describe the goal to start a new session"
-              }
-            />
-            <button type="submit" disabled={busy || chatLoading}>
-              Send
-            </button>
           </div>
-          <p className="session-footnote">
-            Session: {activeSessionId ? truncate(activeSessionId, 18) : "none"} · Iteration: {iteration} · State: {runtimeStatus}
-          </p>
-          {error ? <p className="error-line">{error}</p> : null}
-        </form>
+
+          <form className="chat-input-bar" onSubmit={onSubmitInput}>
+            <div className="input-wrap">
+              <input
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder={
+                  activeSessionId
+                    ? "Message the agent about this session"
+                    : "Describe the goal to start a new session"
+                }
+              />
+              <button type="submit" disabled={busy || chatLoading}>
+                Send
+              </button>
+            </div>
+            <p className="session-footnote">
+              Session: {activeSessionId ? truncate(activeSessionId, 18) : "none"} · Iteration: {iteration} · State: {runtimeStatus}
+            </p>
+            {error ? <p className="error-line">{error}</p> : null}
+          </form>
+        </div>
       </main>
 
       <aside className="panel panel-right">
-        <section className="status-card">
-          <h3>Session Status</h3>
-          <p className="status-line">
-            <span className={`status-dot ${uiState}`} />
-            <span className="status-label">State</span>
-            <strong>{runtimeStatus}</strong>
-          </p>
-          <p className="status-line">
-            <span className="status-label">Iteration</span>
-            <strong>{iteration}</strong>
-          </p>
-          <p className="status-line session-inline-id">
-            <span className="status-label">Session ID</span>
-            <strong>{activeSessionId || "none"}</strong>
-          </p>
-          {uiState === "running" ? (
-            <button type="button" className="stop-btn" onClick={onStop} disabled={busy}>
-              Stop
+        <div className="panel-header panel-header-rail">
+          <div className="panel-header-row">
+            <h2>Status</h2>
+            <button
+              type="button"
+              className="panel-toggle"
+              onClick={() => setRightSidebarOpen((previous) => !previous)}
+              aria-label={rightSidebarOpen ? "Hide status sidebar" : "Show status sidebar"}
+            >
+              {rightSidebarOpen ? "›" : "‹"}
             </button>
-          ) : null}
-        </section>
+          </div>
+        </div>
 
-        <section className="logs-section">
-          <h3>Agent Runtime Logs</h3>
-          {latestRuntimeLog ? (
-            <>
-              <button
-                type="button"
-                className="runtime-latest-btn"
-                onClick={() => setRuntimeLogsExpanded((previous) => !previous)}
-              >
-                <div className="log-item">
-                  <div className="log-head">
-                    <span className={`level-badge ${logLevelClass(latestRuntimeLog.level)}`}>
-                      {latestRuntimeLog.level.toUpperCase()}
-                    </span>
-                    <time>{formatTimestamp(latestRuntimeLog.created_at)}</time>
+        <div className={`sidebar-body right ${rightSidebarOpen ? "expanded" : "collapsed"}`}>
+          <section className="status-card">
+            <h3>Session Status</h3>
+            <div className="status-content">
+              <p className="status-line">
+                <span className={`status-dot ${uiState}`} />
+                <span className="status-label">State</span>
+                <strong>{runtimeStatus}</strong>
+              </p>
+              <p className="status-line">
+                <span className="status-label">Iteration</span>
+                <strong>{iteration}</strong>
+              </p>
+              <p className="status-line session-inline-id">
+                <span className="status-label">Session ID</span>
+                <strong>{activeSessionId || "none"}</strong>
+              </p>
+              {uiState === "running" ? (
+                <button type="button" className="stop-btn" onClick={onStop} disabled={busy}>
+                  Stop
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="logs-section">
+            <h3>Agent Runtime Logs</h3>
+            {latestRuntimeLog ? (
+              <>
+                <button
+                  type="button"
+                  className="runtime-latest-btn"
+                  onClick={() => setRuntimeLogsExpanded((previous) => !previous)}
+                >
+                  <div className="log-item">
+                    <div className="log-head">
+                      <span className={`level-badge ${logLevelClass(latestRuntimeLog.level)}`}>
+                        {latestRuntimeLog.level.toUpperCase()}
+                      </span>
+                      <time>{formatTimestamp(latestRuntimeLog.created_at)}</time>
+                    </div>
+                    <p className="log-text">{latestRuntimeLog.message}</p>
                   </div>
-                  <p className="log-text">{latestRuntimeLog.message}</p>
-                </div>
-                <span className={`chevron ${runtimeLogsExpanded ? "open" : ""}`}>⌄</span>
-              </button>
+                  <span className={`chevron ${runtimeLogsExpanded ? "open" : ""}`}>⌄</span>
+                </button>
 
-              <AnimatePresence initial={false}>
-                {runtimeLogsExpanded && olderRuntimeLogs.length > 0 ? (
-                  <motion.div
-                    className="log-list"
-                    ref={runtimeLogsRef}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                  >
-                    {olderRuntimeLogs.map((entry, index) => (
-                      <div key={`${entry.created_at}-${index}`} className="log-item">
+                <AnimatePresence initial={false}>
+                  {runtimeLogsExpanded && olderRuntimeLogs.length > 0 ? (
+                    <motion.div
+                      className="log-list"
+                      ref={runtimeLogsRef}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                    >
+                      {olderRuntimeLogs.map((entry, index) => (
+                        <div key={`${entry.created_at}-${index}`} className="log-item">
+                          <div className="log-head">
+                            <span className={`level-badge ${logLevelClass(entry.level)}`}>
+                              {entry.level.toUpperCase()}
+                            </span>
+                            <time>{formatTimestamp(entry.created_at)}</time>
+                          </div>
+                          <p className="log-text">{entry.message}</p>
+                        </div>
+                      ))}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </>
+            ) : (
+              <p className="sidebar-empty">No runtime logs</p>
+            )}
+          </section>
+
+          <section className="logs-section">
+            <button
+              type="button"
+              className="logs-toggle"
+              onClick={() => setSystemLogsExpanded((previous) => !previous)}
+            >
+              <span>System & API Logs</span>
+              <span className={`chevron ${systemLogsExpanded ? "open" : ""}`}>⌄</span>
+            </button>
+            <AnimatePresence initial={false}>
+              {systemLogsExpanded ? (
+                <motion.div
+                  className="log-list"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  {systemLogs.length === 0 ? (
+                    <p className="sidebar-empty">No system logs</p>
+                  ) : (
+                    systemLogs.map((entry, index) => (
+                      <div key={`${entry.created_at}-${entry.source}-${index}`} className="log-item">
                         <div className="log-head">
-                          <span className={`level-badge ${logLevelClass(entry.level)}`}>{entry.level.toUpperCase()}</span>
+                          <span className={`level-badge ${logLevelClass(entry.level)}`}>
+                            {entry.level.toUpperCase()}
+                          </span>
                           <time>{formatTimestamp(entry.created_at)}</time>
                         </div>
-                        <p className="log-text">{entry.message}</p>
+                        <p className="log-text">[{entry.source}] {entry.message}</p>
                       </div>
-                    ))}
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </>
-          ) : (
-            <p className="sidebar-empty">No runtime logs</p>
-          )}
-        </section>
-
-        <section className="logs-section">
-          <button
-            type="button"
-            className="logs-toggle"
-            onClick={() => setSystemLogsExpanded((previous) => !previous)}
-          >
-            <span>System & API Logs</span>
-            <span className={`chevron ${systemLogsExpanded ? "open" : ""}`}>⌄</span>
-          </button>
-          <AnimatePresence initial={false}>
-            {systemLogsExpanded ? (
-              <motion.div
-                className="log-list"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-              >
-                {systemLogs.length === 0 ? (
-                  <p className="sidebar-empty">No system logs</p>
-                ) : (
-                  systemLogs.map((entry, index) => (
-                    <div key={`${entry.created_at}-${entry.source}-${index}`} className="log-item">
-                      <div className="log-head">
-                        <span className={`level-badge ${logLevelClass(entry.level)}`}>{entry.level.toUpperCase()}</span>
-                        <time>{formatTimestamp(entry.created_at)}</time>
-                      </div>
-                      <p className="log-text">[{entry.source}] {entry.message}</p>
-                    </div>
-                  ))
-                )}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </section>
-
+                    ))
+                  )}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </section>
+        </div>
       </aside>
     </motion.div>
   );

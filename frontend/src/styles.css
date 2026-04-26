@@ -34,10 +34,21 @@ body {
 
 .console-shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
+  --left-width: 260px;
+  --right-width: 260px;
+  grid-template-columns: var(--left-width) minmax(0, 1fr) var(--right-width);
   width: 100%;
   height: 100vh;
   background: var(--bg-0);
+  transition: grid-template-columns 240ms ease;
+}
+
+.console-shell.left-collapsed {
+  --left-width: 46px;
+}
+
+.console-shell.right-collapsed {
+  --right-width: 46px;
 }
 
 .panel {
@@ -53,6 +64,47 @@ body {
   overflow: hidden;
 }
 
+.console-shell.left-collapsed .panel-left,
+.console-shell.right-collapsed .panel-right {
+  min-width: 46px;
+}
+
+.sidebar-body {
+  overflow: hidden;
+  will-change: height, opacity, transform;
+  transition: opacity 200ms ease, transform 200ms ease, max-height 220ms ease;
+}
+
+.sidebar-body.left {
+  transform-origin: left top;
+}
+
+.sidebar-body.right {
+  transform-origin: right top;
+}
+
+.sidebar-body.expanded {
+  padding: 0;
+  max-height: 3000px;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar-body.collapsed {
+  padding: 0;
+  pointer-events: none;
+  max-height: 0;
+  opacity: 0;
+}
+
+.sidebar-body.left.collapsed {
+  transform: translateX(-8px);
+}
+
+.sidebar-body.right.collapsed {
+  transform: translateX(8px);
+}
+
 .panel-right {
   border-right: 0;
   border-left: 1px solid var(--line);
@@ -62,6 +114,8 @@ body {
   background: var(--bg-0);
   border-right: 0;
   min-width: 0;
+  display: flex;
+  justify-content: center;
 }
 
 .panel-header {
@@ -71,6 +125,37 @@ body {
   gap: 12px;
 }
 
+.panel-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-header-row.compact {
+  margin-bottom: 10px;
+}
+
+.panel-header-rail {
+  border-bottom: 1px solid var(--line);
+}
+
+.console-shell.left-collapsed .panel-left .panel-header h2,
+.console-shell.right-collapsed .panel-right .panel-header h2 {
+  display: none;
+}
+
+.console-shell.left-collapsed .panel-left .panel-header,
+.console-shell.right-collapsed .panel-right .panel-header {
+  padding: 8px;
+  gap: 0;
+}
+
+.console-shell.left-collapsed .panel-left .panel-header-row,
+.console-shell.right-collapsed .panel-right .panel-header-row {
+  justify-content: center;
+}
+
 .panel-header h2 {
   margin: 0;
   font-size: 0.9rem;
@@ -78,6 +163,25 @@ body {
   letter-spacing: 0.02em;
   color: var(--text-soft);
   text-transform: uppercase;
+}
+
+.panel-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #151515;
+  color: #cacaca;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.panel-toggle:hover {
+  border-color: #444;
+  color: #fff;
 }
 
 .new-session-btn {
@@ -202,10 +306,22 @@ body {
 
 .message-feed {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 24px 28px 16px;
+  padding: 24px 0 16px;
   display: grid;
   gap: 12px;
+}
+
+.center-column {
+  width: min(100%, 760px);
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(calc((var(--right-width) - var(--left-width)) / 2));
+  transition: transform 240ms ease;
 }
 
 .message-row {
@@ -413,11 +529,16 @@ body {
 }
 
 .chat-input-bar {
-  position: sticky;
-  bottom: 0;
+  width: 100%;
   border-top: 1px solid var(--line);
   background: rgba(10, 10, 10, 0.96);
-  padding: 12px 18px 14px;
+  padding: 10px 0 12px;
+}
+
+.chat-input-bar .session-footnote,
+.chat-input-bar .error-line {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .input-wrap {
@@ -427,7 +548,7 @@ body {
   border: 1px solid #2c2c2c;
   border-radius: 16px;
   background: #121212;
-  padding: 8px;
+  padding: 7px;
   transition: box-shadow 160ms ease, border-color 160ms ease;
 }
 
@@ -443,7 +564,7 @@ body {
   color: #e6e6e6;
   font-family: "Geist", sans-serif;
   font-size: 0.94rem;
-  padding: 8px 10px;
+  padding: 7px 10px;
 }
 
 .input-wrap button {
@@ -453,7 +574,7 @@ body {
   color: #2f1d03;
   font-weight: 700;
   font-family: "Geist", sans-serif;
-  padding: 9px 14px;
+  padding: 8px 13px;
   cursor: pointer;
 }
 
@@ -748,6 +869,12 @@ body {
     min-height: 100vh;
   }
 
+  .console-shell.left-collapsed,
+  .console-shell.right-collapsed {
+    --left-width: 1fr;
+    --right-width: 1fr;
+  }
+
   .panel-left,
   .panel-right,
   .panel-center {
@@ -762,6 +889,15 @@ body {
 
   .panel-center {
     min-height: 60vh;
+  }
+
+  .chat-input-bar {
+    width: 100%;
+  }
+
+  .center-column {
+    width: 100%;
+    transform: none;
   }
 }
 
